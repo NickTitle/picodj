@@ -2,6 +2,45 @@ const cart = document.querySelector('#cart');
 const waveNames = ['triangle', 'tilted-saw', 'saw', 'square', 'pulse', 'organ', 'noise', 'phaser'];
 let lastExportRequest = null;
 
+const trackerSurfaceSelector = [
+  '#p8_frame_0',
+  '#p8_frame',
+  '#p8_container',
+  '#p8_start_button',
+  '#p8_playarea',
+  '#canvas',
+  '#touch_controls_background',
+  '#touch_controls_gfx',
+  '#p8_menu_buttons_touch',
+  '#p8_menu_buttons',
+  '.p8_menu_button',
+].join(', ');
+
+function installTouchSelectionGuard() {
+  let frameDocument;
+  try { frameDocument = cart.contentDocument; } catch (_) { return; }
+  if (!frameDocument?.head || frameDocument.getElementById('pocket-tracker-touch-guard')) return;
+
+  const style = frameDocument.createElement('style');
+  style.id = 'pocket-tracker-touch-guard';
+  style.textContent = `${trackerSurfaceSelector} {
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }`;
+  frameDocument.head.appendChild(style);
+
+  const preventSurfaceDefault = (event) => {
+    if (event.target?.closest?.(trackerSurfaceSelector)) event.preventDefault();
+  };
+  frameDocument.addEventListener('selectstart', preventSurfaceDefault);
+  frameDocument.addEventListener('contextmenu', preventSurfaceDefault);
+}
+
+cart.addEventListener('load', installTouchSelectionGuard);
+installTouchSelectionGuard();
+
 function readProject() {
   let gpio;
   try { gpio = cart.contentWindow.pico8_gpio; } catch (_) { return null; }
