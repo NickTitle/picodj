@@ -7,7 +7,10 @@ effect, three persistent song slots, live playback, and browser exports.
 ## Controls
 
 - D-pad: move around the pattern; Down from step 16 opens the action menu.
-- O: raise the selected note. X: lower it.
+- Tap O: raise the selected note. Tap X: lower it.
+- Hold O: open the Start palette for playback, save/load, and export.
+- Hold X: open the Select palette for the current step/channel parameters.
+  Use Up/Down to choose, Left/Right to adjust, O to use, and X to close.
 - O+X: toggle the selected step between a note and a rest.
 - In the action menu, Left/Right chooses an action, O performs its primary
   action, X performs the alternate action, and Up returns to the pattern.
