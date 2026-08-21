@@ -250,6 +250,7 @@ experiments. They are not sufficient as the compatibility data model.
 3. **Waveform-instrument milestone.** Recommendation: lossless preservation in
    M1/M2 and a dedicated editor in M3. Requiring the waveform editor in M1
    would delay the Track 1 goal without improving its fidelity.
-4. **Project publication.** The local repository has no commit or remote yet.
-   Repository owner/visibility must be chosen before publishing; this does not
-   block local M1 work.
+4. **Project publication.** The public repository is `NickTitle/picodj`, with
+   reviewed arcs merged through focused pull requests. Publication ownership
+   and visibility are resolved; each new arc remains gated on exact-head
+   review before merge.

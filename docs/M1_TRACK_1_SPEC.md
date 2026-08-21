@@ -259,12 +259,11 @@ Status: implemented and cartridge-tested in the working tree.
   source: `tracker.html` is SHA-256
   `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
   and `tracker.js` is SHA-256
-  `8e7782dfbc969c3c27ececccbbd4f7ea5047985ea787638417bc69e3b5ccc16a`.
+  `5d9925a079d9801b3b48efebd2df0be42317aef55ab0a3f2e6bad68076e997af`.
   Any source change must still be followed by regeneration and exact-source
   verification before commit, publication, or release.
-- At the time of verification, the tracker repository was unborn and had no
-  remote. Publication remains gated on the owner's visibility choice and final
-  review approval.
+- The project is published publicly as `NickTitle/picodj`. M1.3 is proposed by
+  draft PR #4; merge remains gated on exact-head review approval.
 - Native save destination and the M1 raw-versus-materialized default need the
   decisions listed in `REQUIREMENTS.md`; neither blocks M1.1 bank/accessor work.
 
@@ -315,4 +314,33 @@ wrapper, and a minimal inspection cart reported `stat(0)` memory use as
 regenerated from the accepted source. A second export matched both outputs
 byte-for-byte, producing the SHA-256 values recorded above. Generated-output
 freshness is therefore resolved; repository destination and Git author
-identity remain the publication and commit blockers.
+identity were still publication blockers at that historical M1.1 checkpoint;
+both were subsequently resolved by the public `NickTitle/picodj` repository
+and its established noreply author identity.
+
+## 11. M1.3 verification record
+
+The faithful-playback implementation was verified at exact clean head
+`19dd4ce6916df2241d33fe840c78d8dd24b96ccf`, based on merged `main`
+`6bc095c478b753ec4d45cbe046cdd077f5226cc9`. All ten PICO-8 0.2.7
+cartridges exited with status 0 and emitted their pass markers:
+
+- `tests/hold_menus.p8`;
+- `tests/m1_bank.p8`;
+- `tests/m1_playback.p8`;
+- `tests/m1_track_1_fixture.p8`;
+- `tests/playback_transport.p8`;
+- `tests/sfx_safety.p8`;
+- `tests/sfx_ui.p8`;
+- `tests/sfx_visual.p8`;
+- `tests/smoke.p8`;
+- `tests/song_ui.p8`.
+
+Two independent browser exports were byte-identical, and the committed files
+matched them: `tracker.html` SHA-256
+`858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and `tracker.js` SHA-256
+`5d9925a079d9801b3b48efebd2df0be42317aef55ab0a3f2e6bad68076e997af`.
+Node syntax, whitespace, committed-content safety, and clean-worktree checks
+also passed at that head. The existing port 4179 apphost served those exact
+hashes from the M1.3 worktree.
