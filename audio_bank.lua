@@ -168,6 +168,14 @@ function bank_note_raw(sfx,row)
  return addr and peek2(addr) or nil
 end
 
+function bank_note_authored_raw(sfx,row)
+ if not bank_note_addr(sfx,row) then return nil end
+ if bank_profile_active and sfx>=1 and sfx<=4 then
+  return peek2(bank_profile_base+(sfx-1)*64+row*2)
+ end
+ return bank_note_raw(sfx,row)
+end
+
 function bank_note_pitch(sfx,row)
  local value=bank_note_raw(sfx,row)
  return value and value&0x3f or nil
@@ -235,6 +243,39 @@ function bank_set_sfx_meta_raw(sfx,index,value)
  local addr=bank_sfx_addr(sfx,64+index)
  if not addr then return false end
  return bank_write_byte(addr,value)
+end
+
+function bank_sfx_speed(sfx)
+ return bank_sfx_meta_raw(sfx,1)
+end
+
+function bank_set_sfx_speed(sfx,value)
+ if not bank_int(value,1,255) or bank_sfx_is_waveform(sfx) then return false end
+ return bank_set_sfx_meta_raw(sfx,1,value)
+end
+
+function bank_sfx_loop_start(sfx)
+ local value=bank_sfx_meta_raw(sfx,2)
+ return value and value&0x1f or nil
+end
+
+function bank_set_sfx_loop_start(sfx,value)
+ if not bank_int(value,0,31) or bank_sfx_is_waveform(sfx) then return false end
+ local raw=bank_sfx_meta_raw(sfx,2)
+ if raw==nil then return false end
+ return bank_set_sfx_meta_raw(sfx,2,(raw&0xe0)|value)
+end
+
+function bank_sfx_loop_end(sfx)
+ local value=bank_sfx_meta_raw(sfx,3)
+ return value and value&0x1f or nil
+end
+
+function bank_set_sfx_loop_end(sfx,value)
+ if not bank_int(value,0,31) or bank_sfx_is_waveform(sfx) then return false end
+ local raw=bank_sfx_meta_raw(sfx,3)
+ if raw==nil then return false end
+ return bank_set_sfx_meta_raw(sfx,3,(raw&0xe0)|value)
 end
 
 function bank_equal(a,b)

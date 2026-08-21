@@ -20,9 +20,14 @@ audition over the canonical PICO-8 audio bank.
 - In the action menu, Left/Right chooses an action, O performs its primary
   action, X performs the alternate action, and Up returns to the pattern.
 - In SONG, Up/Down chooses pattern `00`–`3f`, Left/Right chooses channel,
-  O hands the selected SFX to the next editor, and tap X returns.
+  O opens the selected channel's native SFX, and tap X returns.
 - Hold X in SONG for SFX/mute/flow edits, one-step undo, and native playback.
   Left/Right stages a value, O commits, and X cancels without changing bytes.
+- In SFX, Up/Down scrolls all 32 rows and Left/Right selects pitch,
+  instrument, built/custom mode, volume, or effect. O edits and tap X returns
+  to the same SONG position. Hold X opens rest, undo, metadata, and SFX-slot
+  navigation. Metadata exposes all four raw bytes plus speed and loop/LEN.
+  Waveform slots remain byte-exact, visibly read-only native data.
 
 SONG playback uses native `music(pattern)` and the reversible Track 1 playback
 profile. Save/load/JSON/WAV actions remain visibly disabled until the lossless
@@ -54,6 +59,7 @@ timeout 6s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 ```
 
 `tracker.html` and `tracker.js` are generated. `audio_bank.lua` is the native
-bank boundary, `song_ui.lua` owns the SONG workflow, and `tracker.lua` retains
-the legacy sketch plus shared six-button input. `index.html` and `mobile.js`
-still contain the disabled legacy browser bridge.
+bank boundary, `song_ui.lua` owns SONG, `sfx_ui.lua` owns the native SFX
+editor, and `tracker.lua` retains the legacy sketch plus shared six-button
+input. `index.html` and `mobile.js` still contain the disabled legacy browser
+bridge.
