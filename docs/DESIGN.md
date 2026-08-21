@@ -137,6 +137,14 @@ zero. Browser local storage wraps those bytes as deterministic lowercase hex
 under `pocket-tracker:project:v2:last-known-good`; decoded bytes, rather than
 JSON formatting, remain authoritative.
 
+M1.4B keeps the production Lua graph unchanged to preserve the verified
+256-token reserve. The browser Files panel encodes and decodes only this valid
+last-known-good envelope. A valid JSON import atomically replaces the durable
+slot after full validation and storage read-back; the existing 42-page Load
+transaction remains the only path that can stage and commit imported bytes to
+the live bank. This separation gives malformed files no live or durable write
+path and keeps browser code out of arbitrary cartridge RAM.
+
 ## 5. Editing transactions
 
 1. An input action resolves to one typed command such as `set_note_pitch`.
@@ -273,8 +281,8 @@ can use a cartridge-native character picker.
 
 The browser shell drives the same envelope over GPIO. It may store a
 last-known-good project in local storage and download/upload JSON or `.p8`
-files. It must not directly reach into arbitrary PICO-8 RAM; only the shared
-128-byte GPIO array is a supported boundary.
+files. File codecs operate on the validated durable envelope, not arbitrary
+PICO-8 RAM; live commits still cross only the shared 128-byte GPIO boundary.
 
 The existing wrapper's single 78-byte snapshot is replaced by a paged protocol
 because a native bank is 4,608 bytes before metadata.
@@ -331,6 +339,10 @@ zero-filled exactly as PICO-8 would; malformed non-hex content is rejected.
 
 Native import uses `reload(staging, 0x3100, 0x1200, filename)` from a fixed data
 cart and then the same in-cart bank validator.
+
+M1.4B exposes JSON import in the browser Files panel. The `.p8` decoder is
+retained as a deterministic export verifier; user-facing `.p8` import remains a
+later native/data-cart sub-arc rather than bypassing staged project commit.
 
 ### `.p8` export
 

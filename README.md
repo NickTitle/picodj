@@ -38,20 +38,27 @@ Save and load use one browser last-known-good slot containing a checksummed
 v2 envelope and the complete 4,608-byte authored bank. Save is reported only
 after browser-storage read-back succeeds; load stages every page and commits
 only after the frame, envelope, and bank checksums agree. JSON/WAV actions
-remain visibly disabled because the older 78-byte format cannot safely
-represent native edits.
+inside the cartridge remain disabled because the older 78-byte format cannot
+safely represent native edits.
 
 ## Browser exports
 
-The mobile wrapper still contains the disabled legacy 78-byte JSON/WAV bridge.
-Those actions are not part of the last-known-good project slot because they are
-not lossless for SONG edits:
+The browser shell's **Files** panel operates only on the checksum-verified
+last-known-good project slot. Save in the tracker first, then choose one of:
 
-- JSON containing the exact notes, tempo, waveform, volume, and effect data.
-- A rendered WAV preview suitable for sharing or dropping into a DAW.
+- deterministic Pocket Tracker JSON containing the exact 4,608-byte authored
+  bank, project metadata, provenance, revision, and playback profile;
+- valid `.p8` audio in **authored + profile** mode, with the exact bank and a
+  Pocket Tracker sidecar header;
+- valid `.p8` audio in **materialized playback** mode, with the Track 1 gain
+  profile applied only to exported SFX 1–4.
 
-The WAV renderer approximates PICO-8's eight waveform families. Neither legacy
-format should be treated as a native-bank project export.
+JSON import validates every field, range, checksum, and exact key set before it
+atomically replaces the durable browser slot. It never writes live cartridge
+RAM; choose **Load** in the tracker to use the existing staged, checksum-gated
+commit path. Invalid files and storage faults preserve both live and durable
+state. Bridge frames, undo, snapshots, and temporary playback bytes are never
+serialized.
 
 ## Build and test
 
@@ -66,13 +73,17 @@ timeout 6s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 
 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   /path/to/pico8 -x tests/size_budget.p8
+
+node tests/mobile_hold.js
+node tests/project_io.js
+node tests/file_io.js
 ```
 
 `tracker.html` and `tracker.js` are generated. `audio_bank.lua` is the native
 bank boundary, `song_ui.lua` owns SONG, `sfx_ui.lua` owns the native SFX
 editor, and `tracker.lua` retains the legacy sketch plus shared six-button
-input. `index.html` and `mobile.js` still contain the disabled legacy browser
-bridge.
+input. `index.html` and `mobile.js` own the lossless browser file codecs and
+controls; they do not synthesize or edit authoritative audio.
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
 plus a calibrated 261-token probe. Its pass marker therefore gates the shipped
