@@ -12,7 +12,7 @@ menu_names={"play","save","load","slot","bpm","wave","vol","fx","export"}
 wave_names={"tri","tilt","saw","sqr","pulse","organ","noise","phase"}
 hold_frames=18
 start_menu={"play","save","load","json","wav"}
-select_menu={"rest","wave","vol","fx","bpm","slot"}
+select_menu={"song","rest","wave","vol","fx","bpm","slot"}
 
 function fresh_song()
  notes={}
@@ -294,8 +294,15 @@ function close_context_menu()
  action_gate=true
 end
 
+function open_song_screen()
+ say("song screen unavailable")
+end
+
 function context_apply(name,secondary)
- if name=="rest" then
+ if name=="song" then
+  open_song_screen()
+  close_context_menu()
+ elseif name=="rest" then
   toggle_rest()
   close_context_menu()
  elseif name=="json" then
@@ -459,6 +466,7 @@ end
 
 function context_label(name)
  if name=="play" then return playing and "stop playback" or "start playback"
+ elseif name=="song" then return "song patterns"
  elseif name=="rest" then return notes[cursor_ch][cursor_step]<0 and "restore note" or "make rest"
  elseif name=="wave" then return "wave "..wave_names[waves[cursor_ch]+1]
  elseif name=="vol" then return "volume "..volumes[cursor_ch]
@@ -477,7 +485,7 @@ function draw_context_menu()
  local title=context_menu=="start" and "start / project" or "select ch"..cursor_ch.." step "..cursor_step
  print(title,64-#title*2,18,12)
  for i=1,#items do
-  local y=29+(i-1)*11
+  local y=27+(i-1)*9
   local label=context_label(items[i])
   if i==context_item then
    rectfill(14,y-2,113,y+6,5)
