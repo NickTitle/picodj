@@ -248,16 +248,17 @@ Status: implemented and cartridge-tested in the working tree.
 | `tests/m1_track_1_fixture.p8` | Reload fixture; validate exact pattern bytes and SFX 1..4 raw rows/metadata. | Added; pass marker observed on PICO-8 0.2.7. |
 | Existing `tests/smoke.p8` | Documents/protects the eight-file prototype behavior. | Preserved unchanged. |
 | `tests/m1_bank.p8` | Accessor masks/boundaries, exact seed, profile, staging/commit/rollback/checksum, corruption, and waveform preservation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
+| `tests/hold_menus.p8` | Tap-versus-hold input, release gating, contextual Start/Select palettes, value adjustment, and O+X chord isolation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
 | Future `tests/m1_playback.p8` | Profile idempotence, native mixer channels, two loops, restoration. | M1.3. |
 | Future browser tests | Envelope codec and GPIO fault cases. | M1.4. |
 
 ## 8. Known blockers and owner choices
 
-- The generated outputs were deterministically regenerated from the accepted
-  M1.1 source: `tracker.html` is SHA-256
+- The generated outputs were deterministically regenerated from the current
+  source: `tracker.html` is SHA-256
   `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
   and `tracker.js` is SHA-256
-  `da02b1652170de6035d0b46c344f7a4153ee7c4de490736b4220169d72b50c2e`.
+  `8e7782dfbc969c3c27ececccbbd4f7ea5047985ea787638417bc69e3b5ccc16a`.
   Any source change must still be followed by regeneration and exact-source
   verification before commit, publication, or release.
 - At the time of verification, the tracker repository was unborn and had no
