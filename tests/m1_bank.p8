@@ -95,6 +95,8 @@ function _init()
  check(bank_profile_apply(),"profile apply")
  check(bank_profile_is_active(),"profile active")
  check_profile_words("profile first apply")
+ check(bank_note_authored_raw(1,0)==peek2(bank_profile_base),
+       "authored accessor ignores preview profile")
  check(bank_checksum(bank_audio_base)==nil,"authored checksum blocked while profiled")
  check(bank_profile_apply(),"profile second apply")
  check_profile_words("profile idempotent")
@@ -110,6 +112,8 @@ function _init()
  check(not bank_profile_is_active(),"profile inactive")
  check_restored_profile("profile restored")
  check_checksum(bank_audio_base,profile_crc,"profile checksum restored")
+ check(bank_note_authored_raw(1,0)==bank_note_raw(1,0),
+       "authored accessor reads canonical when stopped")
  check(bank_profile_restore(),"profile second restore")
  check(bank_revision==profile_revision and not bank_dirty,"restore does not dirty project")
 
@@ -184,6 +188,20 @@ function _init()
  check(bank_set_sfx_meta_raw(63,3,0xa5),"set last raw metadata")
  check(bank_sfx_meta_raw(63,3)==0xa5,"raw metadata getter")
 
+ -- Semantic SFX metadata owns only documented low bits.
+ poke(bank_sfx_addr(63,65),0x18)
+ poke(bank_sfx_addr(63,66),0xa2)
+ poke(bank_sfx_addr(63,67),0xc4)
+ bank_project_init()
+ check(bank_sfx_speed(63)==0x18 and bank_sfx_loop_start(63)==2 and
+       bank_sfx_loop_end(63)==4,"semantic metadata getters")
+ check(bank_set_sfx_speed(63,31),"semantic speed setter")
+ check(bank_sfx_meta_raw(63,1)==31,"speed owns complete byte")
+ check(bank_set_sfx_loop_start(63,7),"semantic loop start setter")
+ check(bank_sfx_meta_raw(63,2)==0xa7,"loop start preserves high bits")
+ check(bank_set_sfx_loop_end(63,9),"semantic loop end setter")
+ check(bank_sfx_meta_raw(63,3)==0xc9,"loop end preserves high bits")
+
  -- Invalid indices, types, and values never mutate the authored bank.
  local rejected_crc=bank_checksum(bank_audio_base)
  local rejected_revision=bank_revision
@@ -202,6 +220,9 @@ function _init()
        not bank_set_note_volume(63,31,8) and
        not bank_set_note_effect(63,31,8) and
        not bank_set_note_custom(63,31,1),"note setter rejection")
+ check(not bank_set_sfx_speed(63,0) and
+       not bank_set_sfx_loop_start(63,32) and
+       not bank_set_sfx_loop_end(63,32),"semantic metadata rejection")
  check(not bank_set_sfx_meta_raw(63,4,0) and
        not bank_set_sfx_meta_raw(63,3,256),"metadata rejection")
  check(not bank_copy(0x7000,bank_audio_base) and
