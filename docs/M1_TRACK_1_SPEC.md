@@ -251,7 +251,8 @@ Status: implemented and cartridge-tested in the working tree.
 | `tests/hold_menus.p8` | Tap-versus-hold input, release gating, contextual Start/Select palettes, value adjustment, and O+X chord isolation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/playback_transport.p8` | Profile idempotence, reversible SFX 63 preview, stop/restore/edit/restart, and complete `stat(46..57)` follow. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/m1_playback.p8` | Real native mixer start/channels plus stop and authored-bank restoration. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
-| Future browser tests | Envelope codec and GPIO fault cases. | M1.4. |
+| `tests/project_io.p8` | 42-page GPIO save/load, exact bank/metadata restore, corrupt/out-of-order/partial rollback. | Added in M1.4A. |
+| `tests/project_io.js` | Envelope/storage round-trip, corrupt record, read-back/write faults, and GPIO paging. | Added in M1.4A. |
 
 ## 8. Known blockers and owner choices
 
@@ -259,13 +260,15 @@ Status: implemented and cartridge-tested in the working tree.
   source: `tracker.html` is SHA-256
   `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
   and `tracker.js` is SHA-256
-  `5d9925a079d9801b3b48efebd2df0be42317aef55ab0a3f2e6bad68076e997af`.
+  `1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.
   Any source change must still be followed by regeneration and exact-source
   verification before commit, publication, or release.
-- The project is published publicly as `NickTitle/picodj`. M1.3 is proposed by
-  draft PR #4; merge remains gated on exact-head review approval.
-- Native save destination and the M1 raw-versus-materialized default need the
-  decisions listed in `REQUIREMENTS.md`; neither blocks M1.1 bank/accessor work.
+- The project is published publicly as `NickTitle/picodj`; M1.3 and the iOS
+  hold fix are merged in `main` at
+  `f222b9fff2e35c06450852f5f213b35d813cc20a`.
+- The native data-cart destination and the M1 raw-versus-materialized export
+  default remain open. M1.4A therefore uses the reversible browser
+  last-known-good slot and does not enable lossless file export/import yet.
 
 ## 9. M1.0 verification record
 
@@ -320,8 +323,8 @@ and its established noreply author identity.
 
 ## 11. M1.3 verification record
 
-The faithful-playback implementation was verified at exact clean head
-`19dd4ce6916df2241d33fe840c78d8dd24b96ccf`, based on merged `main`
+The faithful-playback implementation was reviewed and merged from exact clean
+head `8af4b465426b49ccec2a1d8089cb4adb1b20a359`, based on merged `main`
 `6bc095c478b753ec4d45cbe046cdd077f5226cc9`. All ten PICO-8 0.2.7
 cartridges exited with status 0 and emitted their pass markers:
 
@@ -344,3 +347,22 @@ and `tracker.js` SHA-256
 Node syntax, whitespace, committed-content safety, and clean-worktree checks
 also passed at that head. The existing port 4179 apphost served those exact
 hashes from the M1.3 worktree.
+
+## 12. M1.4A verification record
+
+M1.4A adds `project_io.lua` and the browser-side v2 envelope adapter. The
+focused cartridge test exercises all 42 save/load pages, cross-runtime GPIO
+CRC agreement, exact authored-bank and metadata restoration, corrupt frames,
+idempotent duplicate pages, out-of-order pages, a checksum-valid unknown fixed
+selection, and a partial-transfer timeout. The focused Node test
+exercises deterministic envelope/storage round-trip, corrupt stored data,
+write and read-back faults with last-known-good restoration, checksum-valid
+profile/selection mutation, all save/load pages, duplicate retry, and invalid
+GPIO ordering. The complete cartridge suite now contains
+eleven PICO-8 tests; browser validation also includes both Node regressions.
+
+Two fresh exports must remain byte-identical to the committed artifacts. For
+this M1.4A source, `tracker.html` is SHA-256
+`858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and `tracker.js` is SHA-256
+`1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.

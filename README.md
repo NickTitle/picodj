@@ -34,15 +34,18 @@ audition over the canonical PICO-8 audio bank.
 
 SONG playback uses native `music(pattern)` and the reversible Track 1 playback
 profile. Optional follow reads PICO-8's native `stat(46..57)` mixer state.
-Save/load/JSON/WAV actions remain visibly disabled until the lossless
-4,608-byte native-bank project path lands; the older 78-byte format cannot
-safely represent native edits.
+Save and load use one browser last-known-good slot containing a checksummed
+v2 envelope and the complete 4,608-byte authored bank. Save is reported only
+after browser-storage read-back succeeds; load stages every page and commits
+only after the frame, envelope, and bank checksums agree. JSON/WAV actions
+remain visibly disabled because the older 78-byte format cannot safely
+represent native edits.
 
 ## Browser exports
 
-The mobile wrapper still contains the legacy 78-byte JSON/WAV bridge. Those
-actions are disabled in the cartridge while the native-bank replacement is in
-progress because they are not lossless for SONG edits:
+The mobile wrapper still contains the disabled legacy 78-byte JSON/WAV bridge.
+Those actions are not part of the last-known-good project slot because they are
+not lossless for SONG edits:
 
 - JSON containing the exact notes, tempo, waveform, volume, and effect data.
 - A rendered WAV preview suitable for sharing or dropping into a DAW.

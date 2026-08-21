@@ -128,6 +128,15 @@ equality.
 Unknown playback profiles or envelope versions are rejected. Unknown raw
 audio bits are not rejected solely because the current UI cannot name them.
 
+M1.4A's browser slot uses a fixed 4,672-byte binary representation: a 64-byte
+header followed by the exact 4,608-byte authored bank. The header records
+`PTP2`, format/header/total lengths, bank and envelope CRC-16 values, revision,
+the versioned Track 1 `+2` playback profile, bounded project/source strings,
+and source pattern/SFX selection. The envelope CRC treats its own two bytes as
+zero. Browser local storage wraps those bytes as deterministic lowercase hex
+under `pocket-tracker:project:v2:last-known-good`; decoded bytes, rather than
+JSON formatting, remain authoritative.
+
 ## 5. Editing transactions
 
 1. An input action resolves to one typed command such as `set_note_pitch`.
@@ -288,14 +297,16 @@ Each frame is 128 bytes:
 | 14 | 2 | CRC-16/CCITT for header fields and payload |
 | 16 | 112 | payload |
 
-Commands cover announce, read-page, write-page, acknowledge, reject/retry,
-commit, cancel, and error. The producer owns a frame until the consumer echoes
-its transfer id and sequence in an acknowledgement. Duplicate frames are
-acknowledged without applying twice. Out-of-order frames are rejected with the
-next expected offset. A commit succeeds only after total length, total
-checksum, format version, and staged-bank validation pass.
+M1.4A commands cover save-page, acknowledge, load-page, load-commit, done,
+load-request, and error. The producer owns a frame until the consumer echoes
+its transfer id and sequence in an acknowledgement. An exact retry of the
+immediately preceding frame (same transfer, sequence, offset, length, and frame
+CRC) is acknowledged without applying twice. Other old or future pages are
+rejected as out of order. A commit succeeds only after total length, total
+checksum, format version, complete fixed playback-profile/source-selection
+semantics, and staged-bank validation pass.
 
-At 112 payload bytes, a raw bank needs 42 pages. The PICO side processes at
+At 112 payload bytes, the 4,672-byte M1.4A envelope needs 42 pages. The PICO side processes at
 most one page per update and keeps rendering/input responsive. Both sides time
 out to IDLE without touching the canonical bank.
 
