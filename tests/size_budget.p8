@@ -1,0 +1,18 @@
+pico-8 cartridge // http://www.pico-8.com
+version 43
+__lua__
+#include ../audio_bank.lua
+#include ../tracker.lua
+#include ../song_ui.lua
+#include ../sfx_ui.lua
+#include ../project_io.lua
+size_probe=0
+function _init()
+ size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1; size_probe+=1;
+ printh("pocket tracker size budget: passed")
+ extcmd("shutdown")
+end
+
+__label__
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+

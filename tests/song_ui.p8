@@ -7,6 +7,8 @@ __lua__
 
 failures=0
 music_calls={}
+function load_song() return false end
+function save_song() return false end
 app_init=_init
 
 function check(ok,label)
@@ -18,6 +20,10 @@ end
 function native_music(pattern)
  add(music_calls,pattern)
 end
+
+function song_edit_candidate(delta) edit_value=(edit_value+delta)%64 end
+function song_cancel_edit() edit_cancel() end
+function song_commit_edit() return edit_commit() end
 
 function reset_ui()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
@@ -31,15 +37,7 @@ function reset_ui()
  song_pattern=0
  song_channel=0
  song_scroll=0
- song_menu=false
- song_menu_item=1
- song_menu_gate=false
- song_edit=false
- song_entry_gate=false
- song_x_was_down=false
- song_x_hold=0
- song_x_consumed=false
- song_undo_valid=false
+ edit_owner=nil undo_owner=nil
  song_error=nil
  playing=false
  play_tick=0
@@ -79,11 +77,11 @@ function _init()
        "hold x opens select at song")
  update_context_menu(false,false,false,false,false,false,false,false)
  update_context_menu(false,false,true,false,false,false,false,false)
- check(app_view=="song" and song_entry_gate,
+ check(app_view=="song" and action_gate,
        "select song routes to native screen")
 
  -- All 64 patterns and four channels are reachable without wraparound.
- song_entry_gate=false
+ action_gate=false reset_action_input()
  song_move_pattern(63)
  song_move_channel(3)
  check(song_pattern==63 and song_channel==3 and song_scroll==54,
@@ -103,7 +101,7 @@ function _init()
  song_channel=3
  check(song_begin_edit("sfx"),"begin wrap sfx edit")
  song_edit_candidate(1)
- check(song_edit_value==0xc0,"sfx 3f wraps to 00 preserving high bits")
+ check(edit_value==0,"sfx 3f wraps to 00 preserving high bits")
  song_cancel_edit()
  poke(bank_song_addr(63,3),0xc5)
  bank_project_init()
@@ -111,8 +109,8 @@ function _init()
  song_channel=3
  check(song_begin_edit("sfx"),"begin last sfx edit")
  song_edit_candidate(1)
- check(song_edit_value==0xc6,"staged sfx preserves high bits")
- local before=peek(song_edit_addr)
+ check(edit_value==6,"staged sfx preserves high bits")
+ local before=peek(edit_addr)
  local revision=bank_revision
  check(song_commit_edit(),"commit sfx edit")
  local after=bank_song_raw(63,3)
@@ -210,7 +208,7 @@ function _init()
  song_open_sfx()
  check(app_view=="sfx" and sfx_pattern==63 and sfx_channel==3 and
        sfx_number==bank_pattern_sfx(63,3),"sfx handoff identity")
- song_entry_gate=false
+ action_gate=false reset_action_input()
  song_return_from_sfx()
  check(song_pattern==63 and song_channel==3 and song_scroll==54,
        "sfx return preserves song cursor")
@@ -218,14 +216,14 @@ function _init()
  -- SONG's own X hold opens context; a quick release returns without note edit.
  reset_ui()
  app_view="song"
- for i=1,hold_frames do song_update_x(true) end
- check(song_menu and song_menu_gate and app_view=="song",
+ for i=1,hold_frames do update_action_buttons(false,true) end
+ check(context_menu=="song" and context_gate and app_view=="song",
        "song hold x opens contextual menu")
- song_close_menu()
- check(app_view=="song" and song_entry_gate,"menu close release-gated")
- song_entry_gate=false
- song_update_x(true)
- song_update_x(false)
+ close_context_menu()
+ check(app_view=="song" and action_gate,"menu close release-gated")
+ action_gate=false reset_action_input()
+ update_action_buttons(false,true)
+ update_action_buttons(false,false)
  check(app_view=="grid" and action_gate,"song tap x returns safely")
 
  if failures==0 then

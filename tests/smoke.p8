@@ -2,6 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
 #include ../tracker.lua
+#include legacy_tracker.lua
 
 function check(ok,label)
  if not ok then
