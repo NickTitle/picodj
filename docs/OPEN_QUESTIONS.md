@@ -18,9 +18,12 @@ navigation clamps at their native bounds; SFX values wrap from `3f` to `00`.
 
 ## Native project I/O
 
-Legacy slots, JSON, WAV, and GPIO transfers cover only the old 78-byte sketch
-and are disabled with a persistent `native i/o pending` error. They must not be
-re-enabled until the M1.4 lossless 4,608-byte bank/envelope path is available.
+M1.4A uses one namespaced browser last-known-good slot as the safe reversible
+default while the native data-cart destination remains undecided. It stores the
+complete 4,608-byte authored bank plus project name, revision, Track 1 playback
+profile, and source selection in a fixed checksummed v2 envelope. Legacy JSON
+and WAV actions remain disabled; the old 78-byte sketch format is never used by
+save or load.
 
 ## Legacy sketch
 
