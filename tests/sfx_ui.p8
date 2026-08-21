@@ -2,15 +2,15 @@ pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
 #include ../audio_bank.lua
-#include ../tracker.lua
-#include ../song_ui.lua
 #include ../sfx_ui.lua
 fails=0
+function say() end
+function song_restore_then(action) return action() end
 function ck(v,s) if not v then fails+=1 printh("fail: "..s) end end
 function own(a,b,m,s) ck(((a^^b)&(0xffff^^m))==0,s) end
 function setup()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
- bank_project_init() fresh_song() playing=false
+ bank_project_init() playing=false audition_active=false
  song_pattern=0 song_channel=0 song_play_pattern=0
  sfx_number=63 sfx_row=31 sfx_scroll=0 sfx_field=1 sfx_mode="rows"
  sfx_edit=false sfx_menu=false sfx_entry_gate=false sfx_undo_valid=false

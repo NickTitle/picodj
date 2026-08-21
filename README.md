@@ -28,9 +28,13 @@ audition over the canonical PICO-8 audio bank.
   to the same SONG position. Hold X opens rest, undo, metadata, and SFX-slot
   navigation. Metadata exposes all four raw bytes plus speed and loop/LEN.
   Waveform slots remain byte-exact, visibly read-only native data.
+  Hold X also previews the selected row from row mode or the complete SFX from
+  metadata mode through reserved SFX 63 on mixer channel 3; the authored slot
+  is restored byte-for-byte on stop.
 
 SONG playback uses native `music(pattern)` and the reversible Track 1 playback
-profile. Save/load/JSON/WAV actions remain visibly disabled until the lossless
+profile. Optional follow reads PICO-8's native `stat(46..57)` mixer state.
+Save/load/JSON/WAV actions remain visibly disabled until the lossless
 4,608-byte native-bank project path lands; the older 78-byte format cannot
 safely represent native edits.
 

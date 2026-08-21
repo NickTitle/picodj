@@ -46,10 +46,12 @@ selected SONG pattern/channel and SFX number on return.
 
 ## SFX audition channel
 
-- **Default now:** Arc 2 edits and preserves native bytes but does not audition
-  a row. SONG playback remains native and faithful.
-- **Revisit:** M1.3 must reserve and prove a preview channel that never
-  overwrites authored SFX 1-4 or leaks the temporary playback profile.
+- **Default now:** M1.3 snapshots authored SFX 63 outside the bank, uses it as
+  a reversible preview slot on mixer channel 3, and restores all 68 bytes on
+  stop. Song audio/profile state is stopped and restored before preview; an
+  interrupted song optionally resumes afterward. SFX 1-4 are never rewritten.
+- **Revisit:** waveform-slot audition remains unavailable until a reserved
+  waveform-compatible preview path can preserve custom-instrument references.
 
 ## Rest restoration seed
 

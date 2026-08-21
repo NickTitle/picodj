@@ -2,7 +2,7 @@
 
 song_expected_crc=0x2a23
 song_rows=10
-song_menu_items={"sfx","mute","flow","undo","play"}
+song_menu_items={"sfx","mute","flow","undo","play","follow"}
 song_flow_names={"loop","back","stop","reserved"}
 
 legacy_init=_init
@@ -36,8 +36,17 @@ function native_music(pattern)
  music(pattern)
 end
 
+function native_sfx(number,channel,offset,length)
+ sfx(number,channel,offset,length)
+end
+
+function native_stat(index)
+ return stat(index)
+end
+
 function start_song(pattern)
  if playing then return true end
+ if audition_active then stop_audition(false) end
  if not bank_profile_apply() then
   song_error="profile apply failed"
   return false
@@ -45,6 +54,8 @@ function start_song(pattern)
  song_play_pattern=pattern or song_pattern
  native_music(song_play_pattern)
  playing=true
+ audition_restart=false
+ transport_tick=0
  play_tick=0
  play_step=1
  song_error=nil
@@ -53,11 +64,50 @@ function start_song(pattern)
 end
 
 function stop_song()
+ if audition_active then stop_audition(false) end
  native_music(-1)
  bank_profile_restore()
  playing=false
  say("stopped")
  return true
+end
+
+function start_audition(row_only)
+ if audition_active then stop_audition(false) end
+ audition_restart=playing
+ audition_restart_pattern=song_play_pattern
+ if playing or bank_profile_is_active() then stop_song() end
+ if not bank_audition_build(sfx_number,row_only) then
+  song_error="preview unavailable"
+  sfx_error=song_error
+  if audition_restart then start_song(audition_restart_pattern) end
+  return false
+ end
+ audition_active=true
+ audition_tick=0
+ audition_seen=false
+ native_sfx(bank_audition_sfx,bank_audition_channel,0,row_only!=nil and 1 or nil)
+ song_error=nil
+ sfx_error=nil
+ say("sfx preview")
+ return true
+end
+
+function stop_audition(restart)
+ if not audition_active then return true end
+ local resume=restart and audition_restart
+ local pattern=audition_restart_pattern
+ native_sfx(-1,bank_audition_channel)
+ bank_audition_restore()
+ audition_active=false
+ audition_restart=false
+ if resume then return start_song(pattern) end
+ return true
+end
+
+function toggle_audition(row_only)
+ if audition_active then return stop_audition(true) end
+ return start_audition(row_only)
 end
 
 function toggle_song()
@@ -66,10 +116,33 @@ function toggle_song()
 end
 
 function update_playhead()
- if not playing then return end
+ transport_tick+=1
  play_tick+=1
- if play_tick>2 and stat(57) then
-  play_step=stat(55)+1
+ if audition_active then
+  audition_tick+=1
+  local current=native_stat(46+bank_audition_channel)
+  if current==bank_audition_sfx then audition_seen=true
+  elseif audition_seen then
+   stop_audition(true)
+  end
+ end
+ if not playing or transport_tick<=2 then return end
+ if not native_stat(57) then stop_song() return end
+ play_pattern=native_stat(54)
+ play_count=native_stat(55)
+ play_ticks=native_stat(56)
+ for channel=0,3 do
+  local current=native_stat(46+channel)
+  local row=native_stat(50+channel)
+  if channel==song_channel then play_step=mid(0,row,31)+1 end
+  if play_follow and app_view=="sfx" and current==sfx_number then
+   sfx_row=mid(0,row,bank_row_count-1)
+   sfx_keep_visible()
+  end
+ end
+ if play_follow then
+  song_pattern=mid(0,play_pattern,bank_pattern_count-1)
+  song_keep_visible()
  end
 end
 
@@ -157,9 +230,10 @@ function song_cancel_edit()
 end
 
 function song_restore_then(action)
- local restart=playing
- local restart_pattern=song_play_pattern
- if restart or bank_profile_is_active() then stop_song() end
+ local restart=playing or (audition_active and audition_restart)
+ local restart_pattern=playing and song_play_pattern or audition_restart_pattern
+ if audition_active then stop_audition(false) end
+ if playing or bank_profile_is_active() then stop_song() end
  local ok=action()
  if restart then start_song(restart_pattern) end
  return ok
@@ -219,6 +293,7 @@ function song_open_sfx()
 end
 
 function song_return_from_sfx()
+ if audition_active then stop_audition(true) end
  app_view="song"
  song_entry_gate=true
 end
@@ -229,7 +304,8 @@ function song_apply_menu()
  elseif name=="mute" then song_begin_edit("mute")
  elseif name=="flow" then song_begin_edit("flow")
  elseif name=="undo" then song_undo() song_close_menu()
- elseif name=="play" then toggle_song() song_close_menu() end
+ elseif name=="play" then toggle_song() song_close_menu()
+ elseif name=="follow" then play_follow=not play_follow song_close_menu() end
 end
 
 function update_song_edit()
@@ -284,18 +360,6 @@ function update_song_screen()
  elseif btnp(4) then song_open_sfx() end
 end
 
-function update_sfx_handoff()
- if song_entry_gate then
-  if not btn(4) and not btn(5) then song_entry_gate=false end
-  return
- end
- if btnp(5) then
-  song_return_from_sfx()
- elseif btnp(4) then
-  song_error="sfx editor is next arc"
- end
-end
-
 function _init()
  legacy_init()
  bank_project_init()
@@ -313,6 +377,13 @@ function _init()
  song_x_consumed=false
  song_undo_valid=false
  song_error=nil
+ audition_active=false
+ audition_restart=false
+ transport_tick=0
+ play_pattern=0
+ play_count=0
+ play_ticks=0
+ play_follow=true
  if (bank_checksum(bank_audio_base)&0xffff)!=song_expected_crc then
   song_error="native seed mismatch"
  end
@@ -334,7 +405,8 @@ function draw_header()
 end
 
 function song_status()
- local text=playing and "p"..hex2(song_play_pattern).." s"..hex2(song_pattern) or "stop "..hex2(song_pattern)
+ local text=playing and "p"..hex2(play_pattern).." r"..hex2(play_step-1) or
+  (audition_active and "preview" or "stop "..hex2(song_pattern))
  text..=bank_dirty and " dirty" or " clean"
  if song_error then text="! "..song_error end
  return text
@@ -376,11 +448,12 @@ function draw_song_menu()
  rect(17,22,110,101,12)
  print("song context",40,27,12)
  for i=1,#song_menu_items do
-  local y=38+(i-1)*10
+  local y=38+(i-1)*9
   local name=song_menu_items[i]
   local label=name
   if name=="flow" then label=song_flow_names[song_channel+1]
   elseif name=="play" then label=playing and "stop" or "play"
+  elseif name=="follow" then label=play_follow and "follow on" or "follow off"
   elseif name=="undo" and not song_undo_valid then label="undo -" end
   if i==song_menu_item then rectfill(25,y-2,102,y+6,5) end
   print((i==song_menu_item and "> " or "  ")..label,29,y,i==song_menu_item and 7 or 6)
@@ -395,19 +468,6 @@ function draw_song_edit()
  print("raw "..hex2(song_edit_old).." > "..hex2(song_edit_value),34,59,7)
  if song_edit_field=="sfx" then print("l/r value",46,68,6) end
  print("o commit x cancel",32,76,5)
-end
-
-function draw_sfx_handoff()
- cls(0)
- rectfill(0,0,127,8,1)
- print("sfx handoff",2,2,12)
- print("pattern "..hex2(sfx_pattern),34,32,7)
- print("channel "..(sfx_channel+1),34,44,7)
- print("sfx "..hex2(sfx_number),34,56,10)
- print("32-row editor lands",23,74,6)
- print("in the next arc",33,82,6)
- print("x returns to song",29,104,5)
- if song_error then print(song_error,64-#song_error*2,116,8) end
 end
 
 function _draw()
