@@ -22,7 +22,10 @@ const cart = {
   addEventListener(type, listener) { cartListeners.set(type, listener); },
 };
 const document = {
-  querySelector(selector) { assert.equal(selector, '#cart'); return cart; },
+  querySelector(selector) {
+    if (selector === '#cart') return cart;
+    return {addEventListener() {}};
+  },
   createElement() { throw new Error('outer document must remain untouched'); },
 };
 

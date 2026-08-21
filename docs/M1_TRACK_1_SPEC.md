@@ -253,6 +253,7 @@ Status: implemented and cartridge-tested in the working tree.
 | `tests/m1_playback.p8` | Real native mixer start/channels plus stop and authored-bank restoration. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/project_io.p8` | 42-page GPIO save/load, exact bank/metadata restore, corrupt/out-of-order/partial rollback. | Added in M1.4A. |
 | `tests/project_io.js` | Envelope/storage round-trip, corrupt record, read-back/write faults, and GPIO paging. | Added in M1.4A. |
+| `tests/file_io.js` | Deterministic lossless JSON, strict import validation/rollback, and byte-exact authored/materialized `.p8` codecs. | Added in M1.4B. |
 
 ## 8. Known blockers and owner choices
 
@@ -263,12 +264,13 @@ Status: implemented and cartridge-tested in the working tree.
   `1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.
   Any source change must still be followed by regeneration and exact-source
   verification before commit, publication, or release.
-- The project is published publicly as `NickTitle/picodj`; M1.3 and the iOS
-  hold fix are merged in `main` at
-  `f222b9fff2e35c06450852f5f213b35d813cc20a`.
-- The native data-cart destination and the M1 raw-versus-materialized export
-  default remain open. M1.4A therefore uses the reversible browser
-  last-known-good slot and does not enable lossless file export/import yet.
+- The project is published publicly as `NickTitle/picodj`; the production-cart
+  size correction is merged in `main` at
+  `0bcf9b85aa7bf46f0e983772614db0f42c29cf38`.
+- The native data-cart destination remains open. M1.4B exposes lossless JSON
+  import/export plus both labelled `.p8` export representations through the
+  browser last-known-good slot; user-facing `.p8` import remains a later
+  staged native/data-cart sub-arc.
 
 ## 9. M1.0 verification record
 
@@ -381,3 +383,23 @@ SONG, and SFX. The fixed production graph measures exactly 7,928 tokens: 1,803
 fewer than merged M1.4A and 264 below the platform ceiling. The committed
 `tests/size_budget.p8` adds a calibrated 261-token probe to the exact production
 graph and must still emit `pocket tracker size budget: passed`.
+
+## 14. M1.4B browser file boundary
+
+The M1.4B Files panel serializes only a checksum-valid v2 last-known-good
+envelope. JSON contains the complete authored bank, bounded project metadata,
+provenance, revision, fixed Track 1 source selection, and versioned playback
+profile. Import requires the exact schema, bounded ASCII strings and integers,
+lowercase fixed-length bank/checksum fields, bank CRC, reconstructed envelope
+CRC, and storage read-back before replacing the durable slot. Malformed input
+never reaches GPIO or the live bank; the existing staged Load transaction is
+still the only live commit path.
+
+Authored `.p8` output preserves all 4,608 bank bytes and embeds the 64-byte
+Pocket Tracker header as a labelled sidecar comment. Materialized output keeps
+patterns and all unrelated SFX bytes exact while applying the profile gain only
+to non-resting rows in SFX 1..4; it carries no required profile. Both codecs
+have deterministic repeated-output and field-aware decode regressions. No Lua
+source changed in this arc, so the production graph remains exactly 7,928
+tokens with 264 tokens of headroom and the calibrated full-cart gate remains
+unchanged.

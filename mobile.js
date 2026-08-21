@@ -1,6 +1,8 @@
 const cart = document.querySelector('#cart');
-const waveNames = ['triangle', 'tilted-saw', 'saw', 'square', 'pulse', 'organ', 'noise', 'phaser'];
-let lastExportRequest = null;
+const fileToggle = document.querySelector('#file-toggle');
+const filePanel = document.querySelector('#file-panel');
+const fileStatus = document.querySelector('#file-status');
+const projectImport = document.querySelector('#project-import');
 
 const trackerSurfaceSelector = [
   '#p8_frame_0',
@@ -41,30 +43,6 @@ function installTouchSelectionGuard() {
 cart.addEventListener('load', installTouchSelectionGuard);
 installTouchSelectionGuard();
 
-function readProject() {
-  let gpio;
-  try { gpio = cart.contentWindow.pico8_gpio; } catch (_) { return null; }
-  if (!gpio || gpio[0] !== 80 || gpio[1] !== 84 || gpio[2] !== 1) return null;
-  let p = 4;
-  const channels = [];
-  for (let ch = 0; ch < 4; ch++) {
-    channels.push({waveform: gpio[p++], volume: gpio[p++], effect: gpio[p++], notes: []});
-  }
-  for (let ch = 0; ch < 4; ch++) {
-    for (let step = 0; step < 16; step++) {
-      const note = gpio[p++];
-      channels[ch].notes.push(note === 63 ? null : note);
-    }
-  }
-  return {
-    format: 'pocket-tracker',
-    version: 1,
-    bpm: gpio[3],
-    steps: 16,
-    channels: channels.map((ch) => ({...ch, waveformName: waveNames[ch.waveform] || 'unknown'})),
-  };
-}
-
 function download(blob, filename) {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -73,60 +51,7 @@ function download(blob, filename) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-}
-
-function sampleWave(wave, phase, sample, frequency, seed) {
-  const cycle = phase - Math.floor(phase);
-  if (wave === 0) return 1 - 4 * Math.abs(cycle - 0.5);
-  if (wave === 1) return 1.5 * (1 - 2 * cycle) * (0.55 + 0.45 * Math.sin(phase * Math.PI * 2));
-  if (wave === 2) return 1 - 2 * cycle;
-  if (wave === 3) return cycle < 0.5 ? 1 : -1;
-  if (wave === 4) return cycle < 0.25 ? 1 : -1;
-  if (wave === 5) return 0.65 * Math.sin(phase * Math.PI * 2) + 0.25 * Math.sin(phase * Math.PI * 4) + 0.1 * Math.sin(phase * Math.PI * 8);
-  if (wave === 6) {
-    const n = Math.sin((sample + seed * 8191) * 12.9898) * 43758.5453;
-    return (n - Math.floor(n)) * 2 - 1;
-  }
-  return 0.65 * Math.sin(phase * Math.PI * 2) + 0.35 * Math.sin((phase * 1.013 + seed) * Math.PI * 2);
-}
-
-function renderWav(project) {
-  const sampleRate = 44100;
-  const stepSeconds = 60 / project.bpm / 4;
-  const length = Math.ceil(project.steps * stepSeconds * sampleRate);
-  const pcm = new Float32Array(length);
-  for (let ch = 0; ch < project.channels.length; ch++) {
-    const channel = project.channels[ch];
-    const gain = channel.volume / 7 * 0.22;
-    for (let step = 0; step < project.steps; step++) {
-      const note = channel.notes[step];
-      if (note == null || gain === 0) continue;
-      const start = Math.floor(step * stepSeconds * sampleRate);
-      const end = Math.min(length, Math.floor((step + 1) * stepSeconds * sampleRate));
-      const frequency = 16.3516 * Math.pow(2, note / 12);
-      for (let i = start; i < end; i++) {
-        const local = (i - start) / sampleRate;
-        const duration = (end - start) / sampleRate;
-        const attack = Math.min(1, local / 0.006);
-        const release = Math.min(1, (duration - local) / 0.025);
-        const phase = local * frequency;
-        pcm[i] += sampleWave(channel.waveform, phase, i, frequency, ch + 1) * gain * attack * release;
-      }
-    }
-  }
-  const buffer = new ArrayBuffer(44 + pcm.length * 2);
-  const view = new DataView(buffer);
-  const text = (offset, value) => [...value].forEach((char, i) => view.setUint8(offset + i, char.charCodeAt(0)));
-  text(0, 'RIFF'); view.setUint32(4, 36 + pcm.length * 2, true); text(8, 'WAVE');
-  text(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-  text(36, 'data'); view.setUint32(40, pcm.length * 2, true);
-  for (let i = 0; i < pcm.length; i++) {
-    const value = Math.max(-1, Math.min(1, pcm[i]));
-    view.setInt16(44 + i * 2, value < 0 ? value * 32768 : value * 32767, true);
-  }
-  return new Blob([buffer], {type: 'audio/wav'});
+  return true;
 }
 
 const projectStoreKey = 'pocket-tracker:project:v2:last-known-good';
@@ -158,6 +83,7 @@ function envelopeValid(bytes) {
       bytes[14] !== 1 || bytes[15] !== 1 || bytes[16] > 15 || bytes[32] > 23 ||
       bytes[56] !== 0 || bytes[57] !== 1 || bytes[58] !== 4) return false;
   for (let i = 59; i < 64; i++) if (bytes[i] !== 0) return false;
+  if (headerText(bytes, 16, 15) === null || headerText(bytes, 32, 23) === null) return false;
   return crc16(bytes, 64) === get16(bytes, 8) &&
     crc16(bytes, 0, bytes.length, 10, 12) === get16(bytes, 10);
 }
@@ -187,6 +113,206 @@ function sameBytes(a, b) {
   if (!a || !b || a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
+}
+
+function headerText(bytes, offset, limit) {
+  const length = bytes[offset];
+  if (length > limit) return null;
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    const value = bytes[offset + 1 + i];
+    if (value < 32 || value > 126) return null;
+    result += String.fromCharCode(value);
+  }
+  for (let i = length; i < limit; i++) if (bytes[offset + 1 + i] !== 0) return null;
+  return result;
+}
+
+function put16(bytes, offset, value) {
+  bytes[offset] = value & 255;
+  bytes[offset + 1] = value >> 8;
+}
+
+function putHeaderText(bytes, offset, limit, value) {
+  bytes[offset] = value.length;
+  for (let i = 0; i < value.length; i++) bytes[offset + 1 + i] = value.charCodeAt(i);
+}
+
+function hexBytes(hex, length) {
+  if (typeof hex !== 'string' || hex.length !== length * 2 || !/^[0-9a-f]+$/.test(hex)) return null;
+  const bytes = new Uint8Array(length);
+  for (let i = 0; i < length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
+}
+
+function checksumHex(value) { return value.toString(16).padStart(4, '0'); }
+
+function exactKeys(value, keys) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
+}
+
+function safeText(value, limit) {
+  return typeof value === 'string' && value.length <= limit && /^[\x20-\x7e]*$/.test(value);
+}
+
+function projectJson(bytes) {
+  if (!envelopeValid(bytes)) return null;
+  const name = headerText(bytes, 16, 15);
+  const provenance = headerText(bytes, 32, 23);
+  if (name === null || provenance === null) return null;
+  return `${JSON.stringify({
+    format: 'pocket-tracker-project',
+    version: 2,
+    project: {name, revision: get16(bytes, 12)},
+    source: {format: 'pico-8', provenance, pattern: bytes[56]},
+    playbackProfile: {
+      kind: 'track-1-volume-boost', version: bytes[15],
+      sfxStart: bytes[57], sfxCount: bytes[58], volumeBoost: 2,
+    },
+    bank: {
+      encoding: 'hex', length: projectEnvelopeSize - 64,
+      crc16: checksumHex(get16(bytes, 8)), data: envelopeHex(bytes.slice(64)),
+    },
+    checksum: {algorithm: 'crc16-ccitt-false', envelope: checksumHex(get16(bytes, 10))},
+  }, null, 2)}\n`;
+}
+
+function parseProjectJson(raw) {
+  let value;
+  try { value = JSON.parse(raw); } catch (_) { return null; }
+  if (!exactKeys(value, ['format', 'version', 'project', 'source', 'playbackProfile', 'bank', 'checksum']) ||
+      value.format !== 'pocket-tracker-project' || value.version !== 2 ||
+      !exactKeys(value.project, ['name', 'revision']) || !safeText(value.project.name, 15) ||
+      !Number.isInteger(value.project.revision) || value.project.revision < 0 || value.project.revision > 0x7fff ||
+      !exactKeys(value.source, ['format', 'provenance', 'pattern']) || value.source.format !== 'pico-8' ||
+      !safeText(value.source.provenance, 23) || value.source.pattern !== 0 ||
+      !exactKeys(value.playbackProfile, ['kind', 'version', 'sfxStart', 'sfxCount', 'volumeBoost']) ||
+      value.playbackProfile.kind !== 'track-1-volume-boost' || value.playbackProfile.version !== 1 ||
+      value.playbackProfile.sfxStart !== 1 || value.playbackProfile.sfxCount !== 4 ||
+      value.playbackProfile.volumeBoost !== 2 ||
+      !exactKeys(value.bank, ['encoding', 'length', 'crc16', 'data']) || value.bank.encoding !== 'hex' ||
+      value.bank.length !== projectEnvelopeSize - 64 || !/^[0-9a-f]{4}$/.test(value.bank.crc16) ||
+      !exactKeys(value.checksum, ['algorithm', 'envelope']) ||
+      value.checksum.algorithm !== 'crc16-ccitt-false' || !/^[0-9a-f]{4}$/.test(value.checksum.envelope)) return null;
+  const bank = hexBytes(value.bank.data, projectEnvelopeSize - 64);
+  if (!bank || crc16(bank) !== parseInt(value.bank.crc16, 16)) return null;
+  const bytes = new Uint8Array(projectEnvelopeSize);
+  bytes.set([80, 84, 80, 50, 2, 64]);
+  put16(bytes, 6, projectEnvelopeSize);
+  put16(bytes, 8, parseInt(value.bank.crc16, 16));
+  put16(bytes, 12, value.project.revision);
+  bytes[14] = 1;
+  bytes[15] = 1;
+  putHeaderText(bytes, 16, 15, value.project.name);
+  putHeaderText(bytes, 32, 23, value.source.provenance);
+  bytes.set([0, 1, 4], 56);
+  bytes.set(bank, 64);
+  put16(bytes, 10, crc16(bytes, 0, bytes.length, 10, 12));
+  return checksumHex(get16(bytes, 10)) === value.checksum.envelope && envelopeValid(bytes) ? bytes : null;
+}
+
+function materializedBank(bytes) {
+  if (!envelopeValid(bytes)) return null;
+  const bank = bytes.slice(64);
+  for (let sfx = 1; sfx <= 4; sfx++) {
+    const base = 0x100 + sfx * 68;
+    for (let row = 0; row < 32; row++) {
+      const offset = base + row * 2;
+      const word = bank[offset] | (bank[offset + 1] << 8);
+      const volume = (word >> 9) & 7;
+      const boosted = volume === 0 ? word : (word & 0xf1ff) | (Math.min(7, volume + 2) << 9);
+      bank[offset] = boosted & 255;
+      bank[offset + 1] = boosted >> 8;
+    }
+  }
+  return bank;
+}
+
+function p8Audio(bytes, representation) {
+  if (!envelopeValid(bytes) || (representation !== 'authored' && representation !== 'materialized')) return null;
+  const bank = representation === 'authored' ? bytes.slice(64) : materializedBank(bytes);
+  const hex2 = (value) => value.toString(16).padStart(2, '0');
+  const sfxLines = [];
+  for (let sfx = 0; sfx < 64; sfx++) {
+    const base = 0x100 + sfx * 68;
+    let line = '';
+    for (let i = 64; i < 68; i++) line += hex2(bank[base + i]);
+    for (let row = 0; row < 32; row++) {
+      const word = bank[base + row * 2] | (bank[base + row * 2 + 1] << 8);
+      line += hex2(word & 0x3f);
+      line += (((word >> 6) & 7) | ((word >> 12) & 8)).toString(16);
+      line += ((word >> 9) & 7).toString(16);
+      line += ((word >> 12) & 7).toString(16);
+    }
+    sfxLines.push(line);
+  }
+  const musicLines = [];
+  for (let pattern = 0; pattern < 64; pattern++) {
+    const base = pattern * 4;
+    const flags = ((bank[base] >> 7) & 1) | (((bank[base + 1] >> 7) & 1) << 1) |
+      (((bank[base + 2] >> 7) & 1) << 2) | (((bank[base + 3] >> 7) & 1) << 3);
+    musicLines.push(`${hex2(flags)} ${hex2(bank[base] & 0x7f)}${hex2(bank[base + 1] & 0x7f)}` +
+      `${hex2(bank[base + 2] & 0x7f)}${hex2(bank[base + 3] & 0x7f)}`);
+  }
+  const label = representation === 'authored' ? 'authored+profile' : 'materialized';
+  const profile = representation === 'authored' ? `\n-- pocket-tracker-header: ${envelopeHex(bytes.slice(0, 64))}` : '';
+  return `pico-8 cartridge // http://www.pico-8.com\nversion 43\n__lua__\n` +
+    `-- pocket tracker audio export\n-- representation: ${label}${profile}\n__sfx__\n${sfxLines.join('\n')}\n` +
+    `__music__\n${musicLines.join('\n')}\n`;
+}
+
+function parseP8Audio(raw) {
+  if (typeof raw !== 'string') return null;
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  const section = (name) => {
+    const start = lines.indexOf(name);
+    if (start < 0) return null;
+    const result = [];
+    for (let i = start + 1; i < lines.length && !/^__[a-z0-9_]+__$/.test(lines[i]); i++) {
+      if (lines[i] !== '') result.push(lines[i]);
+    }
+    return result;
+  };
+  const music = section('__music__');
+  const sfx = section('__sfx__');
+  if (!music || !sfx || music.length > 64 || sfx.length > 64) return null;
+  const bank = new Uint8Array(projectEnvelopeSize - 64);
+  for (let pattern = 0; pattern < 64; pattern++) {
+    for (let channel = 0; channel < 4; channel++) bank[pattern * 4 + channel] = 0x41 + channel;
+  }
+  for (let number = 0; number < 64; number++) bank[0x100 + number * 68 + 65] = 16;
+  for (let pattern = 0; pattern < music.length; pattern++) {
+    const match = /^([0-9a-f]{2}) ([0-9a-f]{8})$/.exec(music[pattern]);
+    if (!match) return null;
+    const flags = parseInt(match[1], 16);
+    if (flags > 15) return null;
+    for (let channel = 0; channel < 4; channel++) {
+      const value = parseInt(match[2].slice(channel * 2, channel * 2 + 2), 16);
+      if (value > 0x7f) return null;
+      bank[pattern * 4 + channel] = value | (flags & (1 << channel) ? 0x80 : 0);
+    }
+  }
+  for (let number = 0; number < sfx.length; number++) {
+    const line = sfx[number];
+    if (!/^[0-9a-f]{168}$/.test(line)) return null;
+    const base = 0x100 + number * 68;
+    for (let i = 0; i < 4; i++) bank[base + 64 + i] = parseInt(line.slice(i * 2, i * 2 + 2), 16);
+    for (let row = 0; row < 32; row++) {
+      const note = line.slice(8 + row * 5, 13 + row * 5);
+      const pitch = parseInt(note.slice(0, 2), 16);
+      const instrument = parseInt(note[2], 16);
+      const volume = parseInt(note[3], 16);
+      const effect = parseInt(note[4], 16);
+      if (pitch > 63 || volume > 7 || effect > 7) return null;
+      const word = pitch | ((instrument & 7) << 6) | (volume << 9) | (effect << 12) |
+        ((instrument & 8) << 12);
+      bank[base + row * 2] = word & 255;
+      bank[base + row * 2 + 1] = word >> 8;
+    }
+  }
+  const headerMatch = raw.match(/^-- pocket-tracker-header: ([0-9a-f]{128})$/m);
+  return {bank, header: headerMatch ? hexBytes(headerMatch[1], 64) : null};
 }
 
 function storeLastKnownGood(bytes, storage = localStorage) {
@@ -324,33 +450,72 @@ globalThis.PocketTrackerProjectIO = Object.freeze({
   envelopeValid,
   envelopeRecord,
   parseEnvelopeRecord,
+  projectJson,
+  parseProjectJson,
+  materializedBank,
+  p8Audio,
+  parseP8Audio,
   storeLastKnownGood,
   loadLastKnownGood,
   frameValid,
   writeFrame,
 });
 
-function watchExports() {
-  let gpio;
-  try { gpio = cart.contentWindow.pico8_gpio; } catch (_) { gpio = null; }
-
-  const project = readProject();
-  if (gpio && project) {
-    const request = gpio[126];
-    if (lastExportRequest === null) {
-      lastExportRequest = request;
-    } else if (request !== lastExportRequest) {
-      lastExportRequest = request;
-      if (gpio[125] === 2) {
-        download(renderWav(project), 'pocket-tracker-song.wav');
-      } else {
-        download(new Blob([JSON.stringify(project, null, 2)], {type: 'application/json'}), 'pocket-tracker-song.json');
-      }
-    }
-  }
-
-  requestAnimationFrame(watchExports);
+function importProjectJson(raw, storage = localStorage) {
+  const bytes = parseProjectJson(raw);
+  return bytes !== null && storeLastKnownGood(bytes, storage);
 }
 
+function exportStoredFile(kind, storage = localStorage) {
+  const bytes = loadLastKnownGood(storage);
+  if (!bytes) return false;
+  if (kind === 'json') {
+    const json = projectJson(bytes);
+    return json !== null && download(new Blob([json], {type: 'application/json'}),
+      'pocket-tracker-project.json');
+  }
+  const p8 = p8Audio(bytes, kind);
+  if (p8 === null) return false;
+  const filename = kind === 'authored' ? 'pocket-tracker-authored-profile.p8' :
+    'pocket-tracker-materialized.p8';
+  return download(new Blob([p8], {type: 'text/plain'}), filename);
+}
+
+function setFileStatus(message, failed = false) {
+  if (!fileStatus) return;
+  fileStatus.textContent = message;
+  fileStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
+}
+
+fileToggle?.addEventListener('click', () => {
+  const open = filePanel.hidden;
+  filePanel.hidden = !open;
+  fileToggle.setAttribute('aria-expanded', String(open));
+});
+
+filePanel?.addEventListener('click', (event) => {
+  const action = event.target.closest?.('[data-file-action]')?.dataset.fileAction;
+  if (!action) return;
+  if (action === 'import') { projectImport.click(); return; }
+  const ok = exportStoredFile(action);
+  setFileStatus(ok ? 'Download created from the checksum-verified browser slot.' :
+    'No valid browser slot. Save in the tracker first.', !ok);
+});
+
+projectImport?.addEventListener('change', async () => {
+  const file = projectImport.files?.[0];
+  projectImport.value = '';
+  if (!file) return;
+  let raw;
+  try { raw = await file.text(); } catch (_) {
+    setFileStatus('Could not read that project file. The browser slot is unchanged.', true);
+    return;
+  }
+  const ok = importProjectJson(raw);
+  setFileStatus(ok ? 'Imported to the browser slot. Choose Load in the tracker to commit it.' :
+    'Invalid project file. The browser slot and live project are unchanged.', !ok);
+});
+
+globalThis.PocketTrackerFileIO = Object.freeze({importProjectJson, exportStoredFile});
+
 watchProjectIO();
-watchExports();
