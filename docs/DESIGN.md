@@ -160,6 +160,7 @@ M1.1 fixes those allocations as follows:
 | Import staging | `0x8000..0x91ff` | Candidate bank; the only public bulk-copy destination. |
 | Rollback snapshot | `0x9200..0xa3ff` | One pre-commit bank, written only by validated commit. |
 | Track 1 profile snapshot | `0xa400..0xa4ff` | 128 authored note words for temporary preview gain. |
+| SFX audition snapshot | `0xa500..0xa543` | Reversible 68-byte snapshot of reserved preview SFX 63. |
 
 The regions are disjoint and remain within PICO-8's upper user-data memory.
 M1.1 stage validation uses CRC-16/CCITT-FALSE (`poly=0x1021`, `init=0xffff`,

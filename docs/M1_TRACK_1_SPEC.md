@@ -249,7 +249,8 @@ Status: implemented and cartridge-tested in the working tree.
 | Existing `tests/smoke.p8` | Documents/protects the eight-file prototype behavior. | Preserved unchanged. |
 | `tests/m1_bank.p8` | Accessor masks/boundaries, exact seed, profile, staging/commit/rollback/checksum, corruption, and waveform preservation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/hold_menus.p8` | Tap-versus-hold input, release gating, contextual Start/Select palettes, value adjustment, and O+X chord isolation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
-| Future `tests/m1_playback.p8` | Profile idempotence, native mixer channels, two loops, restoration. | M1.3. |
+| `tests/playback_transport.p8` | Profile idempotence, reversible SFX 63 preview, stop/restore/edit/restart, and complete `stat(46..57)` follow. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
+| `tests/m1_playback.p8` | Real native mixer start/channels plus stop and authored-bank restoration. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
 | Future browser tests | Envelope codec and GPIO fault cases. | M1.4. |
 
 ## 8. Known blockers and owner choices

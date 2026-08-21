@@ -7,6 +7,9 @@ bank_size=0x1200
 bank_stage_base=0x8000
 bank_snapshot_base=0x9200
 bank_profile_base=0xa400
+bank_audition_base=0xa500
+bank_audition_sfx=63
+bank_audition_channel=3
 
 bank_pattern_count=64
 bank_channel_count=4
@@ -36,12 +39,14 @@ function bank_touch()
 end
 
 function bank_project_init()
+ if bank_audition_saved then bank_audition_restore() end
  if bank_profile_active then bank_profile_restore() end
  bank_dirty=false
  bank_revision=0
  bank_snapshot_valid=false
  bank_snapshot_dirty=false
  bank_profile_active=false
+ bank_audition_saved=false
 end
 
 function bank_mark_clean()
@@ -382,5 +387,30 @@ function bank_profile_restore()
   end
  end
  bank_profile_active=false
+ return true
+end
+
+function bank_audition_restore()
+ if not bank_audition_saved then return end
+ memcpy(bank_sfx_addr(bank_audition_sfx,0),bank_audition_base,bank_sfx_size)
+ bank_audition_saved=false
+end
+
+-- SFX 63 is a reversible scratch slot; preview never dirties the project.
+function bank_audition_build(source,row)
+ if bank_sfx_is_waveform(source) then return false end
+ bank_audition_restore()
+ memcpy(bank_audition_base,bank_sfx_addr(bank_audition_sfx,0),bank_sfx_size)
+ bank_audition_saved=true
+ local destination=bank_sfx_addr(bank_audition_sfx,0)
+ local source_base=source==bank_audition_sfx and bank_audition_base or
+  bank_sfx_addr(source,0)
+ if row!=nil then
+  memset(destination,0,bank_sfx_size)
+  poke2(destination,peek2(source_base+row*2))
+  poke(destination+65,peek(source_base+65))
+ else
+  memcpy(destination,source_base,bank_sfx_size)
+ end
  return true
 end

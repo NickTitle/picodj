@@ -3,7 +3,7 @@
 sfx_rows=9
 sfx_fields={"pitch","inst","custom","volume","effect"}
 sfx_field_x={16,32,40,48,56}
-sfx_menu_items={"metadata","rest","undo","prev sfx","next sfx"}
+sfx_menu_items={"preview","metadata","rest","undo","prev sfx","next sfx"}
 sfx_meta_fields={"speed","start/len","end"}
 sfx_rest_words={}
 
@@ -190,13 +190,16 @@ function sfx_close_menu()
 end
 
 function sfx_change_slot(delta)
+ if audition_active then stop_audition(true) end
  sfx_number=mid(0,sfx_number+delta,bank_sfx_count-1)
  sfx_error=nil
 end
 
 function sfx_apply_menu()
  local name=sfx_menu_items[sfx_menu_item]
- if name=="metadata" then sfx_mode="meta" sfx_meta_field=1 sfx_close_menu()
+ if name=="preview" then
+  toggle_audition(sfx_mode=="rows" and sfx_row or nil) sfx_close_menu()
+ elseif name=="metadata" then sfx_mode="meta" sfx_meta_field=1 sfx_close_menu()
  elseif name=="rest" then sfx_toggle_rest() sfx_close_menu()
  elseif name=="undo" then sfx_undo() sfx_close_menu()
  elseif name=="prev sfx" then sfx_change_slot(-1) sfx_close_menu()
@@ -350,17 +353,18 @@ function draw_sfx_meta()
 end
 
 function draw_sfx_menu()
- rectfill(17,20,110,102,0)
- rect(17,20,110,102,12)
- print("sfx context",42,25,12)
+ rectfill(17,12,110,108,0)
+ rect(17,12,110,108,12)
+ print("sfx context",42,16,12)
  for i=1,#sfx_menu_items do
-  local y=37+(i-1)*11
+  local y=27+(i-1)*10
   local label=sfx_menu_items[i]
+  if label=="preview" and audition_active then label="stop preview" end
   if label=="undo" and not sfx_undo_valid then label="undo -" end
   if i==sfx_menu_item then rectfill(24,y-2,103,y+6,5) end
   print((i==sfx_menu_item and "> " or "  ")..label,28,y,i==sfx_menu_item and 7 or 6)
  end
- print("o choose x back",35,94,5)
+ print("o choose x back",35,100,5)
 end
 
 function draw_sfx_edit()
@@ -376,7 +380,8 @@ function draw_sfx_handoff()
  cls(0)
  rectfill(0,0,127,8,1)
  print("sfx "..hex2(sfx_number),2,2,12)
- print((sfx_is_waveform() and "wave" or (bank_profile_is_active() and "profile" or "auth")),42,2,6)
+ print((sfx_is_waveform() and "wave" or (audition_active and "preview" or
+  (bank_profile_is_active() and "profile" or "auth"))),42,2,6)
  print(bank_dirty and "dirty" or "clean",92,2,bank_dirty and 8 or 5)
  if sfx_mode=="meta" then draw_sfx_meta() else draw_sfx_rows() end
  if sfx_error then print("! "..sfx_error,2,117,8) end

@@ -2,16 +2,18 @@ pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
 #include ../audio_bank.lua
-#include ../tracker.lua
-#include ../song_ui.lua
 #include ../sfx_ui.lua
 fails=0
-calls={}
+hold_frames=18
+function say() end
+function song_restore_then(action) return action() end
+function song_return_from_sfx() app_view="song" end
+function open_context_menu(kind) context_menu=kind context_gate=true end
+function update_context_menu() context_menu=nil end
 function ck(v,s) if not v then fails+=1 printh("fail: "..s) end end
-function native_music(p) add(calls,p) end
 function setup(slot)
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
- bank_project_init() fresh_song() playing=false calls={}
+ bank_project_init() playing=false audition_active=false
  song_pattern=0 song_channel=0 song_play_pattern=0 app_view="sfx"
  sfx_number=slot sfx_row=0 sfx_scroll=0 sfx_field=1 sfx_mode="rows"
  sfx_edit=false sfx_menu=false sfx_entry_gate=false sfx_undo_valid=false
@@ -33,16 +35,6 @@ function _init()
   ck(peek(bank_sfx_addr(0,i))==bytes[i+1],"wave byte "..i)
  end
  ck(not bank_dirty and bank_revision==0,"wave bytes exact clean")
- setup(1)
- local authored=bank_note_raw(1,0)
- ck(start_song(0),"play")
- sfx_field=1 ck(sfx_begin_row_edit(),"active begin")
- sfx_edit_value=(sfx_edit_value+1)%64 ck(sfx_commit_edit(),"active commit")
- ck(#calls==5 and calls[1]==0 and calls[2]==-1 and calls[3]==0 and
-  calls[4]==-1 and calls[5]==0,"stop restore restart")
- stop_song()
- local changed=bank_note_raw(1,0)
- ck(((authored^^changed)&0xffc0)==0,"active edit preserves authored bits")
  setup(63)
  for i=1,hold_frames do sfx_update_actions(false,true) end
  ck(sfx_menu and sfx_menu_gate,"hold x menu")
