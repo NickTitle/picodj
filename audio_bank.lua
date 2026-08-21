@@ -1,21 +1,12 @@
 -- pocket tracker native pico-8 audio bank core
 
-bank_audio_base=0x3100
-bank_song_base=0x3100
-bank_sfx_base=0x3200
-bank_size=0x1200
-bank_stage_base=0x8000
-bank_snapshot_base=0x9200
-bank_profile_base=0xa400
-bank_audition_base=0xa500
-bank_audition_sfx=63
-bank_audition_channel=3
+bank_audio_base,bank_song_base,bank_sfx_base=0x3100,0x3100,0x3200
+bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200
+bank_profile_base,bank_audition_base=0xa400,0xa500
+bank_audition_sfx,bank_audition_channel=63,3
 
-bank_pattern_count=64
-bank_channel_count=4
-bank_sfx_count=64
-bank_row_count=32
-bank_sfx_size=68
+bank_pattern_count,bank_channel_count,bank_sfx_count=64,4,64
+bank_row_count,bank_sfx_size=32,68
 
 function bank_int(v,lo,hi)
  return type(v)=="number" and v==flr(v) and v>=lo and v<=hi
@@ -41,12 +32,9 @@ end
 function bank_project_init()
  if bank_audition_saved then bank_audition_restore() end
  if bank_profile_active then bank_profile_restore() end
- bank_dirty=false
- bank_revision=0
- bank_snapshot_valid=false
- bank_snapshot_dirty=false
- bank_profile_active=false
- bank_audition_saved=false
+ bank_dirty,bank_revision=false,0
+ bank_snapshot_valid,bank_snapshot_dirty=false,false
+ bank_profile_active,bank_audition_saved=false,false
 end
 
 function bank_mark_clean()

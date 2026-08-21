@@ -1,20 +1,12 @@
 -- browser last-known-good project bridge
 
-io_gpio=0x5f80
-io_header=0xa544
-io_header_size=64
-io_envelope_size=io_header_size+bank_size
-io_payload_size=112
+io_gpio,io_header,io_header_size=0x5f80,0xa544,64
+io_envelope_size,io_payload_size=io_header_size+bank_size,112
 io_project_name="strfld track 1"
 io_project_source="e7e97ab track 1"
 
-io_page_save=1
-io_ack=2
-io_page_load=3
-io_commit_load=4
-io_done=5
-io_error=6
-io_request_load=7
+io_page_save,io_ack,io_page_load,io_commit_load=1,2,3,4
+io_done,io_error,io_request_load=5,6,7
 
 function io_crc_byte(crc,value)
  crc=(crc^^(value<<8))&0xffff
@@ -122,7 +114,7 @@ function save_song()
  if io_mode!="idle" then io_fail("project i/o busy",2) return false end
  io_stop_authored()
  if not io_prepare_envelope() then io_fail("save prepare failed",3) return false end
- io_id=(io_id+1)%256 io_sequence=0 io_offset=0 io_mode="save"
+ io_id,io_sequence,io_offset,io_mode=(io_id+1)%256,0,0,"save"
  io_wait=0
  io_emit_save_page()
  song_error=nil
@@ -134,10 +126,9 @@ function load_song(show_notice)
  if show_notice==false then return false end
  if io_mode!="idle" then io_fail("project i/o busy",2) return false end
  io_stop_authored()
- io_id=(io_id+1)%256 io_sequence=0 io_offset=0
- io_load_last_sequence=-1 io_load_last_offset=-1 io_load_last_crc=-1
- io_load_complete=false
- io_mode="load" io_wait=0
+ io_id,io_sequence,io_offset=(io_id+1)%256,0,0
+ io_load_last_sequence,io_load_last_offset,io_load_last_crc=-1,-1,-1
+ io_load_complete,io_mode,io_wait=false,"load",0
  io_emit_control(io_request_load,0)
  song_error=nil
  say("loading browser slot")
@@ -210,7 +201,7 @@ function io_commit_loaded()
  if not bank_stage_commit(expected) then io_fail("load commit failed",8) return end
  bank_revision=io_get16(io_header+12)
  bank_dirty=false bank_snapshot_valid=false
- song_undo_valid=false sfx_undo_valid=false
+ undo_owner=nil
  io_mode="idle"
  io_emit_control(io_done,0)
  song_error=nil
@@ -248,7 +239,7 @@ end
 project_legacy_init=_init
 function _init()
  project_legacy_init()
- io_id=0 io_sequence=0 io_offset=0 io_wait=0 io_mode="idle"
+ io_id,io_sequence,io_offset,io_wait,io_mode=0,0,0,0,"idle"
 end
 
 project_legacy_update60=_update60

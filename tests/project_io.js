@@ -40,10 +40,13 @@ const io = sandbox.PocketTrackerProjectIO;
 const pumpProjectBridge = raf[0];
 const projectSource = fs.readFileSync('project_io.lua', 'utf8');
 const songSource = fs.readFileSync('song_ui.lua', 'utf8');
+const trackerSource = fs.readFileSync('tracker.lua', 'utf8');
 assert.doesNotMatch(projectSource, /save_addr|save_size|dset\(|request_export/,
   'lossless project bridge never calls the legacy 78-byte actions');
-assert.match(songSource, /function request_export\(\) native_io_pending\(\) end/,
-  'legacy JSON/WAV export remains disabled');
+assert.doesNotMatch(songSource + trackerSource, /function request_export|dset\(/,
+  'legacy JSON/WAV and 78-byte persistence implementations are not shipped');
+assert.match(trackerSource, /native i\/o pending/,
+  'legacy export controls remain visibly disabled');
 
 function put16(bytes, offset, value) {
   bytes[offset] = value & 255;

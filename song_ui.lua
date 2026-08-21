@@ -1,7 +1,6 @@
 -- native song/pattern screen
 
-song_expected_crc=0x2a23
-song_rows=10
+song_expected_crc,song_rows=0x2a23,10
 song_menu_items={"sfx","mute","flow","undo","play","follow"}
 song_flow_names={"loop","back","stop","reserved"}
 
@@ -16,33 +15,22 @@ function rebuild_track() end
 function rebuild_all() end
 function audition() end
 
-function native_io_pending()
- song_error="native i/o pending"
- say(song_error)
-end
-
-function save_song() native_io_pending() end
-function load_song() native_io_pending() return false end
-function request_export() native_io_pending() end
-
 function context_label(name)
+ if name=="flow" then return song_flow_names[song_channel+1] end
+ if name=="follow" then return play_follow and "follow on" or "follow off" end
+ if name=="undo" then
+  return undo_owner==(context_menu=="sfx" and "sfx" or "song") and "undo" or "undo -"
+ end
+ if name=="preview" then return audition_active and "stop preview" or "preview" end
  if name=="save" or name=="load" or name=="json" or name=="wav" then
   return name.." - native pending"
  end
  return legacy_context_label(name)
 end
 
-function native_music(pattern)
- music(pattern)
-end
-
-function native_sfx(number,channel,offset,length)
- sfx(number,channel,offset,length)
-end
-
-function native_stat(index)
- return stat(index)
-end
+native_music=music
+native_sfx=sfx
+native_stat=stat
 
 function start_song(pattern)
  if playing then return true end
@@ -172,61 +160,9 @@ end
 function open_song_screen()
  app_view="song"
  context_menu=nil
- song_entry_gate=true
- song_x_was_down=false
- song_x_hold=0
- song_x_consumed=false
+ action_gate=true reset_action_input()
  song_keep_visible()
  say("native song")
-end
-
-function song_open_menu()
- song_menu=true
- song_menu_item=1
- song_menu_gate=true
- song_x_consumed=true
-end
-
-function song_close_menu()
- song_menu=false
- song_menu_gate=false
- song_entry_gate=true
- song_x_was_down=false
- song_x_hold=0
- song_x_consumed=false
-end
-
-function song_edit_candidate(delta)
- if song_edit_field=="sfx" then
-  local value=((song_edit_value&0x3f)+delta)%64
-  song_edit_value=(song_edit_value&0xc0)|value
- else
-  song_edit_value=song_edit_value^^song_edit_mask
- end
-end
-
-function song_begin_edit(field)
- local addr=bank_song_addr(song_pattern,song_channel)
- if not addr then return false end
- if field=="flow" and song_channel==3 then
-  song_error="ch4 flag is reserved"
-  return false
- end
- song_edit_field=field
- song_edit_addr=addr
- song_edit_old=peek(addr)
- song_edit_value=song_edit_old
- song_edit_mask=field=="mute" and 0x40 or 0x80
- if field!="sfx" then song_edit_candidate(1) end
- song_menu=false
- song_edit=true
- return true
-end
-
-function song_cancel_edit()
- song_edit=false
- song_edit_field=nil
- song_entry_gate=true
 end
 
 function song_restore_then(action)
@@ -239,119 +175,99 @@ function song_restore_then(action)
  return ok
 end
 
-function song_commit_edit()
- if song_edit_value==song_edit_old then
-  song_cancel_edit()
-  return true
- end
- local old_dirty=bank_dirty
- local old_revision=bank_revision
- local old_value=song_edit_old
- local addr=song_edit_addr
- local ok=song_restore_then(function()
-  return bank_write_byte(addr,song_edit_value)
- end)
+function edit_error(owner,text)
+ if owner=="song" then song_error=text else sfx_error=text end
+end
+
+function edit_begin(owner,addr,width,old,keep,shift,max_value,label)
+ edit_owner=owner edit_addr=addr edit_width=width edit_old=old
+ edit_keep=keep edit_shift=shift edit_max=max_value edit_label=label
+ edit_value=(old>>shift)&max_value edit_dirty=bank_dirty
+ return true
+end
+
+function edit_cancel()
+ local owner=edit_owner
+ edit_owner=nil
+ action_gate=true reset_action_input()
+end
+
+function edit_write(addr,width,value)
+ if width==1 then return bank_write_byte(addr,value) end
+ return bank_write_word(addr,value)
+end
+
+function edit_commit()
+ local owner=edit_owner
+ local value=(edit_old&edit_keep)|(edit_value<<edit_shift)
+ if value==edit_old then edit_cancel() return true end
+ local ok=song_restore_then(function() return edit_write(edit_addr,edit_width,value) end)
  if ok then
-  song_undo_valid=true
-  song_undo_addr=addr
-  song_undo_value=old_value
-  song_undo_dirty=old_dirty
-  song_undo_revision=old_revision
-  song_error=nil
- else
-  song_error="edit rejected"
- end
- song_cancel_edit()
+  undo_owner=owner undo_addr=edit_addr undo_width=edit_width
+  undo_value=edit_old undo_dirty=edit_dirty edit_error(owner,nil)
+ else edit_error(owner,"edit rejected") end
+ edit_cancel()
  return ok
 end
 
-function song_undo()
- if not song_undo_valid then
-  song_error="nothing to undo"
-  return false
- end
- local ok=song_restore_then(function()
-  return bank_write_byte(song_undo_addr,song_undo_value)
- end)
- if ok then
-  bank_dirty=song_undo_dirty
-  song_undo_valid=false
-  song_error=nil
-  say("undone")
- else
-  song_error="undo rejected"
- end
+function edit_undo(owner)
+ if undo_owner!=owner then edit_error(owner,"nothing to undo") return false end
+ local ok=song_restore_then(function() return edit_write(undo_addr,undo_width,undo_value) end)
+ if ok then bank_dirty=undo_dirty undo_owner=nil edit_error(owner,nil) say("undone")
+ else edit_error(owner,"undo rejected") end
  return ok
 end
+
+function edit_update()
+ if btnp(0) then edit_value=(edit_value+edit_max)%(edit_max+1)
+ elseif btnp(1) then edit_value=(edit_value+1)%(edit_max+1)
+ elseif btnp(4) then edit_commit()
+ elseif btnp(5) then edit_cancel() end
+end
+
+function draw_edit()
+ rectfill(13,41,114,84,0) rect(13,41,114,84,11)
+ print("edit "..edit_label,37,47,11)
+ print("raw "..hex2(edit_old&0xff).." > "..hex2(edit_value),32,59,7)
+ print("l/r value",45,69,6) print("o commit x cancel",31,78,5)
+end
+
+function song_begin_edit(field)
+ local addr=bank_song_addr(song_pattern,song_channel)
+ if not addr then return false end
+ if field=="flow" and song_channel==3 then song_error="ch4 flag is reserved" return false end
+ local shift=field=="sfx" and 0 or (field=="mute" and 6 or 7)
+ local ok=edit_begin("song",addr,1,peek(addr),field=="sfx" and 0xc0 or
+  (field=="mute" and 0xbf or 0x7f),shift,field=="sfx" and 63 or 1,field)
+ if field!="sfx" then edit_value=1-edit_value end
+ return ok
+end
+
+function song_undo() return edit_undo("song") end
 
 function song_open_sfx()
  sfx_pattern=song_pattern
  sfx_channel=song_channel
  sfx_number=bank_pattern_sfx(song_pattern,song_channel)
  app_view="sfx"
- song_entry_gate=true
+ action_gate=true reset_action_input()
 end
 
 function song_return_from_sfx()
  if audition_active then stop_audition(true) end
  app_view="song"
- song_entry_gate=true
-end
-
-function song_apply_menu()
- local name=song_menu_items[song_menu_item]
- if name=="sfx" then song_begin_edit("sfx")
- elseif name=="mute" then song_begin_edit("mute")
- elseif name=="flow" then song_begin_edit("flow")
- elseif name=="undo" then song_undo() song_close_menu()
- elseif name=="play" then toggle_song() song_close_menu()
- elseif name=="follow" then play_follow=not play_follow song_close_menu() end
-end
-
-function update_song_edit()
- if btnp(0) then song_edit_candidate(-1)
- elseif btnp(1) then song_edit_candidate(1)
- elseif btnp(4) then song_commit_edit()
- elseif btnp(5) then song_cancel_edit() end
-end
-
-function update_song_menu()
- if song_menu_gate then
-  if not btn(4) and not btn(5) then song_menu_gate=false end
-  return
- end
- if btnp(2) then
-  song_menu_item=(song_menu_item+#song_menu_items-2)%#song_menu_items+1
- elseif btnp(3) then
-  song_menu_item=song_menu_item%#song_menu_items+1
- elseif btnp(4) then song_apply_menu()
- elseif btnp(5) then song_close_menu() end
-end
-
-function song_update_x(x_down)
- if x_down then
-  song_x_hold+=1
-  if song_x_hold>=hold_frames and not song_x_consumed then
-   song_open_menu()
-  end
- elseif song_x_was_down then
-  if not song_x_consumed then app_view="grid" action_gate=true end
-  song_x_hold=0
-  song_x_consumed=false
- end
- song_x_was_down=x_down
- return x_down
+ action_gate=true reset_action_input()
 end
 
 function update_song_screen()
- if song_entry_gate then
-  if not btn(4) and not btn(5) then song_entry_gate=false end
+ if input_gated() then return end
+ if edit_owner=="song" then return edit_update() end
+ if context_menu then
+  update_context_menu(btn(4),btn(5),btnp(4),btnp(5),btnp(0),btnp(1),btnp(2),btnp(3))
   return
  end
- if song_edit then return update_song_edit() end
- if song_menu then return update_song_menu() end
 
- if song_update_x(btn(5)) then return end
+ if update_action_buttons(btn(4),btn(5)) then return end
 
  if btnp(0) then song_move_channel(-1)
  elseif btnp(1) then song_move_channel(1)
@@ -364,25 +280,10 @@ function _init()
  legacy_init()
  bank_project_init()
  app_view="grid"
- song_pattern=0
- song_channel=0
- song_scroll=0
- song_menu=false
- song_menu_item=1
- song_menu_gate=false
- song_edit=false
- song_entry_gate=false
- song_x_was_down=false
- song_x_hold=0
- song_x_consumed=false
- song_undo_valid=false
- song_error=nil
- audition_active=false
- audition_restart=false
- transport_tick=0
- play_pattern=0
- play_count=0
- play_ticks=0
+ song_pattern,song_channel,song_scroll=0,0,0
+ edit_owner,undo_owner,song_error=nil,nil,nil
+ audition_active,audition_restart=false,false
+ transport_tick,play_pattern,play_count,play_ticks=0,0,0,0
  play_follow=true
  if (bank_checksum(bank_audio_base)&0xffff)!=song_expected_crc then
   song_error="native seed mismatch"
@@ -439,39 +340,13 @@ function draw_song_screen()
  end
  print("dpad move o sfx hold x menu",4,101,5)
  print("tap x back",44,109,6)
- if song_menu then draw_song_menu() end
- if song_edit then draw_song_edit() end
-end
-
-function draw_song_menu()
- rectfill(17,22,110,101,0)
- rect(17,22,110,101,12)
- print("song context",40,27,12)
- for i=1,#song_menu_items do
-  local y=38+(i-1)*9
-  local name=song_menu_items[i]
-  local label=name
-  if name=="flow" then label=song_flow_names[song_channel+1]
-  elseif name=="play" then label=playing and "stop" or "play"
-  elseif name=="follow" then label=play_follow and "follow on" or "follow off"
-  elseif name=="undo" and not song_undo_valid then label="undo -" end
-  if i==song_menu_item then rectfill(25,y-2,102,y+6,5) end
-  print((i==song_menu_item and "> " or "  ")..label,29,y,i==song_menu_item and 7 or 6)
- end
- print("o choose x back",35,91,5)
-end
-
-function draw_song_edit()
- rectfill(14,42,113,83,0)
- rect(14,42,113,83,11)
- print("edit "..song_edit_field,43,48,11)
- print("raw "..hex2(song_edit_old).." > "..hex2(song_edit_value),34,59,7)
- if song_edit_field=="sfx" then print("l/r value",46,68,6) end
- print("o commit x cancel",32,76,5)
+ if edit_owner=="song" then draw_edit() end
 end
 
 function _draw()
- if app_view=="song" then draw_song_screen()
+ if app_view=="song" then
+  draw_song_screen()
+  if context_menu then draw_context_menu() end
  elseif app_view=="sfx" then draw_sfx_handoff()
  else legacy_draw() end
 end

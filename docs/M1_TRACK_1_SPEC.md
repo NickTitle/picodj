@@ -366,3 +366,18 @@ this M1.4A source, `tracker.html` is SHA-256
 `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
 and `tracker.js` is SHA-256
 `1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.
+
+## 13. Full-cartridge token gate
+
+Merged M1.4A failed the real `pico8 -x pocket-tracker.p8` load path at exactly
+9,731/8,192 production tokens (9,748 with the 17-token inspection wrapper),
+even though HTML export returned success. The earlier cartridges compiled
+feature slices and never included all five production Lua files together.
+
+The bounded correction removes only runtime-shadowed prototype bodies from
+the shipped graph, preserves them in `tests/legacy_tracker.lua`, and shares
+the context-menu, hold/release, edit, undo, and modal-draw engines across GRID,
+SONG, and SFX. The fixed production graph measures exactly 7,928 tokens: 1,803
+fewer than merged M1.4A and 264 below the platform ceiling. The committed
+`tests/size_budget.p8` adds a calibrated 261-token probe to the exact production
+graph and must still emit `pocket tracker size budget: passed`.

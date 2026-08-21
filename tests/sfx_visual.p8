@@ -11,7 +11,7 @@ function _init()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
  bank_project_init()
  sfx_number=1 sfx_row=15 sfx_scroll=11 sfx_field=4 sfx_mode="rows"
- sfx_menu=false sfx_edit=false sfx_error=nil playing=false audition_active=false
+ context_menu=nil edit_owner=nil sfx_error=nil playing=false audition_active=false
  draw_sfx_handoff()
  extcmd("set_filename","picodj-sfx-m13")
  extcmd("screen")

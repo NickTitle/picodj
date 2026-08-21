@@ -63,6 +63,9 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy /path/to/pico8 \
 
 timeout 6s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   /path/to/pico8 -run tests/smoke.p8
+
+env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+  /path/to/pico8 -x tests/size_budget.p8
 ```
 
 `tracker.html` and `tracker.js` are generated. `audio_bank.lua` is the native
@@ -70,3 +73,8 @@ bank boundary, `song_ui.lua` owns SONG, `sfx_ui.lua` owns the native SFX
 editor, and `tracker.lua` retains the legacy sketch plus shared six-button
 input. `index.html` and `mobile.js` still contain the disabled legacy browser
 bridge.
+
+`tests/size_budget.p8` compiles the exact five-file production include graph
+plus a calibrated 261-token probe. Its pass marker therefore gates the shipped
+cart below 7,932 tokens, leaving more than 256 tokens below PICO-8's 8,192-token
+ceiling.

@@ -2,6 +2,8 @@ pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
 #include ../audio_bank.lua
+#include ../tracker.lua
+#include ../song_ui.lua
 #include ../sfx_ui.lua
 fails=0
 function say() end
@@ -13,15 +15,15 @@ function setup()
  bank_project_init() playing=false audition_active=false
  song_pattern=0 song_channel=0 song_play_pattern=0
  sfx_number=63 sfx_row=31 sfx_scroll=0 sfx_field=1 sfx_mode="rows"
- sfx_edit=false sfx_menu=false sfx_entry_gate=false sfx_undo_valid=false
+ edit_owner=nil undo_owner=nil context_menu=nil action_gate=false
  sfx_error=nil
 end
 function edit(field,value,mask)
  sfx_field=field
  local before=bank_note_raw(63,31)
  ck(sfx_begin_row_edit(),"begin field "..field)
- sfx_edit_value=value
- ck(sfx_commit_edit(),"commit field "..field)
+ edit_value=value
+ ck(edit_commit(),"commit field "..field)
  own(before,bank_note_raw(63,31),mask,"owned field "..field)
 end
 function _init()
@@ -34,7 +36,7 @@ function _init()
  edit(4,7,0x0e00) edit(5,3,0x7000)
  local before=bank_note_raw(63,31) local rev=bank_revision
  sfx_field=1 ck(sfx_begin_row_edit(),"begin cancel")
- sfx_edit_value=22 sfx_cancel_edit()
+ edit_value=22 edit_cancel()
  ck(bank_note_raw(63,31)==before and bank_revision==rev,"cancel exact")
  setup() poke2(bank_note_addr(63,31),0xd6a5) bank_project_init()
  before=bank_note_raw(63,31)
@@ -46,12 +48,12 @@ function _init()
  poke(bank_sfx_addr(63,66),0xa2) poke(bank_sfx_addr(63,67),0xc0)
  bank_project_init()
  sfx_meta_field=1 ck(sfx_begin_meta_edit(),"speed begin")
- sfx_edit_value=31 ck(sfx_commit_edit() and bank_sfx_speed(63)==31,"speed")
+ edit_value=31 ck(edit_commit() and bank_sfx_speed(63)==31,"speed")
  sfx_meta_field=2 ck(sfx_begin_meta_edit(),"len begin")
- sfx_edit_value=12 ck(sfx_commit_edit(),"len commit")
+ edit_value=12 ck(edit_commit(),"len commit")
  ck(bank_sfx_meta_raw(63,2)==0xac,"len reserved")
  sfx_meta_field=3 ck(sfx_begin_meta_edit(),"end begin")
- sfx_edit_value=7 ck(sfx_commit_edit(),"end commit")
+ edit_value=7 ck(edit_commit(),"end commit")
  ck(bank_sfx_meta_raw(63,3)==0xc7,"end reserved")
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end
