@@ -1,0 +1,316 @@
+# M1 implementation specification: Starfield Track 1
+
+Status: executable target; fixture scaffold included
+
+- Fixture authority: `refs/remotes/pico-strfld/main` in the local Starfield
+  checkout
+- Source commit: `e7e97ab01fdd1848e0b78f27191684412e60daf5`
+- Authority state: remote-tracking ref inspected directly with `git show`; the
+  checkout itself was clean on local `master` at
+  `e25e7b86337ce0428c5008eab28e0a07cef6f674`
+- Context worktree: clean `agent/louder-title-music` at
+  `60518b1ba1c2eb8f417555c63ff08afadf1e2385`
+- Source cartridge: `starfield.p8`, text cartridge version 43
+
+## 1. What “Track 1” means
+
+Track 1 is a UI name, not music pattern 1:
+
+- `constants.lua` defines `music_tracks={0}`.
+- `select_music_track(1)` calls `music(music_tracks[1])`, therefore
+  `music(0)`.
+- `starfield.p8` music pattern 0 is `03 01020304`.
+- The `03` flow prefix sets loop-start and loop-back on the same pattern.
+- Its four enabled channels reference SFX 1, 2, 3, and 4.
+- In audio RAM the four pattern bytes are `81 82 03 04`: loop-start is channel
+  0 bit 7 and loop-back is channel 1 bit 7.
+
+Track 1 is therefore one self-looping 32-row pattern. The referenced SFX all
+have speed `0x18` (24), so the timing authority is 32 rows x 24 PICO-8 audio
+ticks on the left-most non-looping channel. Acceptance observes native playback
+state rather than relying on a frame-rate-derived Lua playhead.
+
+## 2. Authored bytes versus audible title playback
+
+The source commit added a runtime loudness transform in `music.lua`:
+
+1. `init_music_menu()` snapshots all 32 note words in SFX 1..4.
+2. `boost_music_sfx()` raises each nonzero volume by two, capped at seven.
+3. Starfield calls `music(0)` against those temporary words.
+4. Turning music off or starting gameplay restores the authored words.
+
+M1 must preserve both facts. Its canonical bank is the authored Starfield bank,
+and its project metadata contains this playback profile:
+
+```text
+profile type: volume-offset-v1
+sfx range:    1..4
+predicate:    volume > 0
+delta:        +2
+clamp:        7
+restore:      required before edit/save/checksum/authored export
+```
+
+This is the default pending Nick's decision in `REQUIREMENTS.md`. The profile
+must never compound when play is pressed repeatedly.
+
+## 3. Exact source representation
+
+The checked-in fixture is
+`tests/fixtures/pico-strfld-e7e97ab-track-1.p8`. It copies the canonical source
+cartridge's complete `__sfx__` and `__music__` sections verbatim so the original
+indices and unrelated neighboring audio bytes remain available for provenance.
+M1 selects only pattern 0 and its dependency closure, SFX 1..4.
+
+The canonical audio-block checksum is SHA-256
+`55c095c40b262f59c501fe0cefba8f2a716434feecc85b63b9aca22a82a27a77`.
+It is calculated over LF-terminated lines beginning with `__sfx__` and ending
+with `01 41424344`. The same extraction from the canonical Git object and from
+the fixture has no diff. The complete fixture-file SHA-256 is
+`ae6e2150da878b84abecc98da725d43bf27d531568e6c1c0a62817a142384666`.
+When loaded as the complete native `0x3100..0x42ff` audio bank, its
+CRC-16/CCITT-FALSE is `0x2a23` (`poly=0x1021`, `init=0xffff`, non-reflected,
+`xorout=0`). M1.1 pins this value before any staged commit.
+
+Referenced SFX headers are:
+
+| SFX | Mode/filter byte | Speed | Loop start | Loop end | Rows |
+|---:|---:|---:|---:|---:|---:|
+| 1 | `01` | `18` (24) | `00` | `00` | 32 |
+| 2 | `0d` | `18` (24) | `00` | `00` | 32 |
+| 3 | `49` | `18` (24) | `00` | `00` | 32 |
+| 4 | `01` | `18` (24) | `00` | `00` | 32 |
+
+The fixture is intentionally data-only. It does not include or modify any
+Starfield Lua, and the Starfield checkout remains read-only for this work.
+
+## 4. Deterministic import/load path
+
+### M1 embedded seed
+
+1. Build `pocket-tracker.p8` with the fixture's authored pattern 0 and SFX 1..4
+   at their original indices. Other song/SFX slots are zero unless reserved by
+   the tracker; tracker UI sounds must not occupy 1..4.
+2. At `_init`, copy `0x3100..0x42ff` to a clean authored snapshot in upper
+   memory before any preview transform.
+3. Create the project record `strfld track 1`, source commit/path, pattern 0,
+   dependency set `{1,2,3,4}`, and `volume-offset-v1` profile.
+4. Compute and retain the raw-bank and envelope checksums.
+5. Open SONG on pattern 00. No host file, cross-repository relative path, or
+   network request is needed at runtime.
+
+### Fixture/native acceptance load
+
+The fixture test loads `0x1200` bytes beginning at source address `0x3100`
+into staging RAM, verifies the expected pattern and referenced SFX, then may
+commit. Production import never reloads directly over the canonical bank.
+
+### Browser import
+
+The wrapper parses the fixture or source `.p8`, emits a version-2 envelope, and
+uses the paged GPIO protocol. The cart validates the same authored bytes and
+adds the playback profile only when the user selects the named Starfield
+import preset or the envelope already contains it. A generic `.p8` import must
+not infer the source's Lua-side boost.
+
+## 5. M1 implementation slices
+
+### M1.0 — Architecture and provenance scaffold (this pass)
+
+- Requirements, design, and this implementation spec exist under `docs/`.
+- Exact source commit/state is recorded.
+- A standalone read-only audio fixture exists under `tests/fixtures/`.
+- A cartridge fixture test validates pattern 0, its flags/dependencies, and all
+  raw SFX 1..4 headers/note rows without changing the prototype.
+
+### M1.1 — Native bank core
+
+Status: implemented and cartridge-tested in the working tree.
+
+- Add address constants and bounded raw/typed accessors.
+- Add bank copy, equality/checksum, staging, commit, and one-snapshot rollback.
+- Add project metadata and playback-profile application/restoration.
+- Replace the prototype's `notes`, `waves`, `volumes`, and `effects` tables as
+  authority; do not delete them until the new fixture path passes.
+
+### M1.2 — Minimum cartridge editor
+
+- HOME, SONG pattern 00, SFX slots 01..04, and FILE screens.
+- SONG edits four channel SFX/mute fields and three flow flags.
+- SFX edits 32 rows of pitch/instrument/custom flag/volume/effect plus raw
+  metadata, speed, and loop/LEN values.
+- Current field, dirty state, profile-active state, play state, and errors are
+  visible.
+- Every action is reachable without keyboard, mouse, or O+X.
+
+### M1.3 — Faithful playback
+
+- Start/stop `music(0)` with idempotent temporary volume boost and restoration.
+- SFX/row audition uses an explicitly reserved channel and never corrupts SFX
+  1..4.
+- Editing during playback performs stop -> restore -> edit -> optional restart.
+- Playback follow reads `stat(46..57)`; it does not estimate rows from BPM.
+
+### M1.4 — Save/reload and export
+
+- Implement one complete native project slot or, if native project-cart policy
+  remains undecided, the browser last-known-good store first.
+- Read-back checksum gates the success message.
+- Lossless JSON export/import retains authored bank and playback profile.
+- Deterministic `.p8` audio export offers authored and materialized modes.
+
+### M1.5 — Release acceptance
+
+- Run all tests against an exact recorded PICO-8 executable version and exact
+  repository HEAD.
+- Export a fresh HTML build and verify desktop/touch editing, audio start, full
+  loop, stop/restore, save/reload, and both export modes.
+- Record `INFO` token, character, and compressed-size results.
+
+## 6. Acceptance criteria
+
+### AC-1 Source and import identity
+
+- Fixture provenance commit equals
+  `e7e97ab01fdd1848e0b78f27191684412e60daf5`.
+- Pattern 0 text is `03 01020304`; RAM bytes are `81 82 03 04`.
+- Every one of the 32 packed note words and all four metadata bytes in each of
+  SFX 1..4 equal the authored source.
+- Pattern 0 dependency traversal returns exactly `{1,2,3,4}`.
+- Loading an invalid/truncated/corrupt fixture leaves the current bank and
+  dirty/revision state unchanged.
+
+### AC-2 Playback fidelity
+
+- Before play, authored SFX 1..4 match AC-1.
+- The temporary playback words match Starfield's transform for all 128 rows:
+  zero volume is unchanged; nonzero volume is `min(7, source+2)`; every other
+  bit is unchanged.
+- Immediately after the mixer starts, channels 0..3 report SFX 1..4,
+  `stat(54)==0`, and `stat(57)` is true.
+- `stat(55)` advances after the full pattern and playback returns to pattern 0;
+  it remains active for at least two complete loops.
+- Stop sets `stat(57)` false and restores every authored word.
+- Native and browser builds pass a human A/B at matched master volume. Because
+  both use identical transformed bytes and the native mixer, a mismatch is
+  treated as a data/build bug rather than accepted as synthesizer variance.
+
+### AC-3 Editability
+
+- From boot using only six buttons, a user can reach each of SFX 1..4 and all
+  32 rows, change pitch, built/custom instrument, volume, and effect, and clear
+  or restore a row.
+- A field edit changes only its owned bits. At least one test starts with
+  unrelated high bits set to prove preservation.
+- The user can edit SFX speed and loop/LEN markers and pattern channel/flow
+  fields.
+- The changed value is visible, audible on audition, and marks the project
+  dirty.
+- Cancel restores the pre-edit value; undo restores the complete prior word.
+
+### AC-4 Save and reload
+
+- Save while stopped writes the authored bank, profile, provenance, revision,
+  and checksum.
+- Save while playing first stops and restores authored bytes.
+- After deliberately mutating pattern and SFX data, reload restores the exact
+  saved envelope and the UI reports clean state.
+- Power/relaunch in the supported target runtime can recover the saved project.
+- Interrupted or checksum-failed reload retains the pre-load project.
+
+### AC-5 Round-trip and export
+
+- Lossless project export -> import produces byte-identical authored bank,
+  profile, and source selection.
+- Authored `.p8` export -> import produces byte-identical pattern 0 and SFX
+  1..4 and keeps the profile in its Pocket Tracker sidecar/envelope.
+- Materialized `.p8` export has no required playback profile; its SFX 1..4
+  equal the deterministic boosted words and plain `music(0)` matches M1
+  audition.
+- Repeating either round-trip three times yields identical decoded envelopes;
+  formatting changes may not accumulate.
+- Export never includes partial temporary state, bridge headers, undo snapshots,
+  or unrelated high-memory bytes.
+
+### AC-6 Constraints
+
+- Cartridge runs below the measured CPU budget on editor, playback, and GPIO
+  transfer frames.
+- It remains within 8,192 tokens, 65,535 characters, and 15,360 compressed code
+  bytes with at least the design's 20% M2/M3 token/compression reserve at M1.
+- Full-project GPIO transfer uses multiple acknowledged pages and cannot commit
+  a partial bank.
+
+## 7. Test inventory
+
+| Test | Purpose | Current state |
+|---|---|---|
+| `tests/m1_track_1_fixture.p8` | Reload fixture; validate exact pattern bytes and SFX 1..4 raw rows/metadata. | Added; pass marker observed on PICO-8 0.2.7. |
+| Existing `tests/smoke.p8` | Documents/protects the eight-file prototype behavior. | Preserved unchanged. |
+| `tests/m1_bank.p8` | Accessor masks/boundaries, exact seed, profile, staging/commit/rollback/checksum, corruption, and waveform preservation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
+| Future `tests/m1_playback.p8` | Profile idempotence, native mixer channels, two loops, restoration. | M1.3. |
+| Future browser tests | Envelope codec and GPIO fault cases. | M1.4. |
+
+## 8. Known blockers and owner choices
+
+- The generated outputs were deterministically regenerated from the accepted
+  M1.1 source: `tracker.html` is SHA-256
+  `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+  and `tracker.js` is SHA-256
+  `da02b1652170de6035d0b46c344f7a4153ee7c4de490736b4220169d72b50c2e`.
+  Any source change must still be followed by regeneration and exact-source
+  verification before commit, publication, or release.
+- At the time of verification, the tracker repository was unborn and had no
+  remote. Publication remains gated on the owner's visibility choice and final
+  review approval.
+- Native save destination and the M1 raw-versus-materialized default need the
+  decisions listed in `REQUIREMENTS.md`; neither blocks M1.1 bank/accessor work.
+
+## 9. M1.0 verification record
+
+Both cartridge tests were run from the unborn `build/mobile-tracker` worktree
+with PICO-8 0.2.7, dummy SDL video/audio drivers, and a 10-second outer
+timeout:
+
+- `tests/m1_track_1_fixture.p8` emitted
+  `pocket tracker m1 fixture: passed` and no failure marker.
+- Existing `tests/smoke.p8` emitted `pocket tracker smoke: passed` and no
+  failure marker.
+
+In this headless environment `extcmd("shutdown")` did not terminate the host,
+so the outer timeout ended both processes with status 124 after their pass
+markers. Acceptance is based on the explicit marker and absence of any
+`fail:` output, not on the timeout status.
+
+## 10. M1.1 verification record
+
+The additive native-bank core is `audio_bank.lua`; `pocket-tracker.p8` includes
+it before the unchanged prototype model. The core fixes staging at
+`0x8000..0x91ff`, one rollback snapshot at `0x9200..0xa3ff`, and the temporary
+Track 1 profile snapshot at `0xa400..0xa4ff`. Generic bulk copy may write only
+staging; CRC-16/CCITT-FALSE-gated commit and rollback exclusively own
+canonical/snapshot writes. The fixture CRC is pinned at `0x2a23`, and a
+one-bit staging corruption is rejected without bank or metadata mutation.
+
+The complete cartridge suite was run with PICO-8 0.2.7 in headless `-x` mode.
+Each process exited with status 0:
+
+- `tests/m1_track_1_fixture.p8` emitted
+  `pocket tracker m1 fixture: passed`;
+- `tests/m1_bank.p8` emitted `pocket tracker m1 bank: passed`;
+- `tests/smoke.p8` emitted `pocket tracker smoke: passed`.
+
+A main-cartridge HTML export to `/tmp` also completed with status 0, proving
+that the included core remains within PICO-8's enforced compile and compressed
+export limits. An `INFO()` inspection cart reported 3,901/8,192 tokens,
+17,808/65,535 characters, and 4,982/15,360 compressed bytes. The identical
+measurement hook alone is 37 tokens and 173 characters, making the included
+core plus prototype 3,864 tokens and 17,635 PICO-8 characters; the inspection
+cart's 4,982 compressed bytes are a conservative measured bound that includes
+the hook. The two source files contain 17,626 host bytes before the cartridge
+wrapper, and a minimal inspection cart reported `stat(0)` memory use as
+`96.0879`. The repository's `tracker.html` and `tracker.js` were then
+regenerated from the accepted source. A second export matched both outputs
+byte-for-byte, producing the SHA-256 values recorded above. Generated-output
+freshness is therefore resolved; repository destination and Git author
+identity remain the publication and commit blockers.
