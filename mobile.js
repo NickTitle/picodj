@@ -134,6 +134,7 @@ const projectEnvelopeSize = 4672;
 const projectPayloadSize = 112;
 const projectCommands = {savePage: 1, ack: 2, loadPage: 3, loadCommit: 4, done: 5, error: 6, loadRequest: 7};
 let projectSaveTransfer = null;
+let projectSaveLastAck = null;
 let projectLoadTransfer = null;
 
 function crc16Byte(crc, value) {
@@ -154,7 +155,9 @@ function envelopeValid(bytes) {
   if (!bytes || bytes.length !== projectEnvelopeSize) return false;
   if (bytes[0] !== 80 || bytes[1] !== 84 || bytes[2] !== 80 || bytes[3] !== 50 ||
       bytes[4] !== 2 || bytes[5] !== 64 || get16(bytes, 6) !== projectEnvelopeSize ||
-      bytes[14] !== 1 || bytes[15] !== 1 || bytes[16] > 15 || bytes[32] > 23) return false;
+      bytes[14] !== 1 || bytes[15] !== 1 || bytes[16] > 15 || bytes[32] > 23 ||
+      bytes[56] !== 0 || bytes[57] !== 1 || bytes[58] !== 4) return false;
+  for (let i = 59; i < 64; i++) if (bytes[i] !== 0) return false;
   return crc16(bytes, 64) === get16(bytes, 8) &&
     crc16(bytes, 0, bytes.length, 10, 12) === get16(bytes, 10);
 }
@@ -238,18 +241,29 @@ function acceptSavePage(gpio) {
   if (!frameValid(gpio, projectCommands.savePage)) return;
   const id = gpio[6], sequence = gpio[7], offset = get16(gpio, 8);
   const total = get16(gpio, 10), length = gpio[12], flags = gpio[13];
-  if ((flags & 1) !== 0) projectSaveTransfer = {id, sequence: 0, offset: 0, bytes: new Uint8Array(total)};
+  const checksum = get16(gpio, 14);
+  if (projectSaveLastAck?.id === id && projectSaveLastAck.sequence === sequence &&
+      projectSaveLastAck.offset === offset && projectSaveLastAck.length === length &&
+      projectSaveLastAck.checksum === checksum) {
+    writeFrame(gpio, projectCommands.ack, id, sequence, offset, total);
+    return;
+  }
+  if ((flags & 1) !== 0 && (!projectSaveTransfer || projectSaveTransfer.id !== id)) {
+    projectSaveTransfer = {id, sequence: 0, offset: 0, bytes: new Uint8Array(total)};
+    projectSaveLastAck = null;
+  }
   const transfer = projectSaveTransfer;
   if (!transfer || transfer.id !== id || total !== projectEnvelopeSize ||
       sequence !== transfer.sequence || offset !== transfer.offset || offset + length > total) {
-    writeProjectError(gpio, id, 6); projectSaveTransfer = null; return;
+    writeProjectError(gpio, id, 6); projectSaveTransfer = null; projectSaveLastAck = null; return;
   }
   transfer.bytes.set(gpio.slice(16, 16 + length), offset);
+  projectSaveLastAck = {id, sequence, offset, length, checksum};
   transfer.offset += length;
   transfer.sequence = (transfer.sequence + 1) & 255;
   if ((flags & 2) !== 0) {
     if (transfer.offset !== total || !storeLastKnownGood(transfer.bytes)) {
-      writeProjectError(gpio, id, 7); projectSaveTransfer = null; return;
+      writeProjectError(gpio, id, 7); projectSaveTransfer = null; projectSaveLastAck = null; return;
     }
     projectSaveTransfer = null;
   }

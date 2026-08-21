@@ -260,7 +260,7 @@ Status: implemented and cartridge-tested in the working tree.
   source: `tracker.html` is SHA-256
   `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
   and `tracker.js` is SHA-256
-  `eef4561b917f57b2dfb52e2fd568af18720e5c525bb06ebd73acf040cb26d1c1`.
+  `1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.
   Any source change must still be followed by regeneration and exact-source
   verification before commit, publication, or release.
 - The project is published publicly as `NickTitle/picodj`; M1.3 and the iOS
@@ -353,14 +353,16 @@ hashes from the M1.3 worktree.
 M1.4A adds `project_io.lua` and the browser-side v2 envelope adapter. The
 focused cartridge test exercises all 42 save/load pages, cross-runtime GPIO
 CRC agreement, exact authored-bank and metadata restoration, corrupt frames,
-out-of-order pages, and a partial-transfer timeout. The focused Node test
+idempotent duplicate pages, out-of-order pages, a checksum-valid unknown fixed
+selection, and a partial-transfer timeout. The focused Node test
 exercises deterministic envelope/storage round-trip, corrupt stored data,
-write and read-back faults with last-known-good restoration, all save/load
-pages, and invalid GPIO ordering. The complete cartridge suite now contains
+write and read-back faults with last-known-good restoration, checksum-valid
+profile/selection mutation, all save/load pages, duplicate retry, and invalid
+GPIO ordering. The complete cartridge suite now contains
 eleven PICO-8 tests; browser validation also includes both Node regressions.
 
 Two fresh exports must remain byte-identical to the committed artifacts. For
 this M1.4A source, `tracker.html` is SHA-256
 `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
 and `tracker.js` is SHA-256
-`eef4561b917f57b2dfb52e2fd568af18720e5c525bb06ebd73acf040cb26d1c1`.
+`1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.

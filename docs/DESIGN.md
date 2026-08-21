@@ -299,10 +299,12 @@ Each frame is 128 bytes:
 
 M1.4A commands cover save-page, acknowledge, load-page, load-commit, done,
 load-request, and error. The producer owns a frame until the consumer echoes
-its transfer id and sequence in an acknowledgement. Duplicate frames are
-acknowledged without applying twice. Out-of-order frames are rejected with the
-next expected offset. A commit succeeds only after total length, total
-checksum, format version, and staged-bank validation pass.
+its transfer id and sequence in an acknowledgement. An exact retry of the
+immediately preceding frame (same transfer, sequence, offset, length, and frame
+CRC) is acknowledged without applying twice. Other old or future pages are
+rejected as out of order. A commit succeeds only after total length, total
+checksum, format version, complete fixed playback-profile/source-selection
+semantics, and staged-bank validation pass.
 
 At 112 payload bytes, the 4,672-byte M1.4A envelope needs 42 pages. The PICO side processes at
 most one page per update and keeps rendering/input responsive. Both sides time

@@ -135,7 +135,8 @@ function load_song(show_notice)
  if io_mode!="idle" then io_fail("project i/o busy",2) return false end
  io_stop_authored()
  io_id=(io_id+1)%256 io_sequence=0 io_offset=0
- io_load_last_sequence=-1 io_load_last_offset=-1 io_load_complete=false
+ io_load_last_sequence=-1 io_load_last_offset=-1 io_load_last_crc=-1
+ io_load_complete=false
  io_mode="load" io_wait=0
  io_emit_control(io_request_load,0)
  song_error=nil
@@ -160,7 +161,8 @@ function io_accept_load_page()
  if total!=io_envelope_size or offset+length>total then
   io_fail("load length invalid",5) return
  end
- if sequence==io_load_last_sequence and offset==io_load_last_offset then
+ if sequence==io_load_last_sequence and offset==io_load_last_offset and
+    io_get16(io_gpio+14)==io_load_last_crc then
   io_ack_load(sequence,offset) return
  end
  if sequence!=io_sequence or offset!=io_offset then
@@ -172,6 +174,7 @@ function io_accept_load_page()
   else poke(bank_stage_base+destination-io_header_size,peek(io_gpio+16+i)) end
  end
  io_load_last_sequence=sequence io_load_last_offset=offset
+ io_load_last_crc=io_get16(io_gpio+14)
  io_offset+=length
  io_sequence=(io_sequence+1)%256
  io_wait=0
@@ -184,7 +187,10 @@ function io_envelope_valid()
     peek(io_header+3)!=50 or peek(io_header+4)!=2 or
     peek(io_header+5)!=io_header_size or io_get16(io_header+6)!=io_envelope_size or
     peek(io_header+14)!=1 or peek(io_header+15)!=1 or
-    peek(io_header+16)>15 or peek(io_header+32)>23 then return false end
+    peek(io_header+16)>15 or peek(io_header+32)>23 or
+    peek(io_header+56)!=0 or peek(io_header+57)!=1 or peek(io_header+58)!=4 or
+    peek(io_header+59)!=0 or peek(io_header+60)!=0 or peek(io_header+61)!=0 or
+    peek(io_header+62)!=0 or peek(io_header+63)!=0 then return false end
  local expected_bank=io_get16(io_header+8)
  if (bank_checksum(bank_stage_base)&0xffff)!=(expected_bank&0xffff) then return false end
  local expected=io_get16(io_header+10)

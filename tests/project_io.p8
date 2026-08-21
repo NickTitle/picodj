@@ -32,6 +32,15 @@ function saved_byte(offset)
  return peek(bank_snapshot_base+offset-io_header_size)
 end
 
+function refresh_saved_envelope_crc()
+ io_put16(io_header+10,0)
+ local crc=0xffff
+ for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
+ for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(bank_snapshot_base+i)) end
+ io_put16(io_header+10,crc)
+ return crc
+end
+
 function emit_saved_page(sequence,offset,corrupt)
  local length=min(io_payload_size,io_envelope_size-offset)
  local flags=(offset==0 and 1 or 0)|(offset+length==io_envelope_size and 2 or 0)
@@ -95,6 +104,10 @@ function _init()
  check(load_song(),"partial load starts")
  local first_length=emit_saved_page(0,0,false)
  check(io_mode=="load" and io_frame_valid(io_ack),"partial first page staged")
+ local partial_offset=io_offset
+ emit_saved_page(0,0,false)
+ check(io_mode=="load" and io_frame_valid(io_ack) and io_offset==partial_offset,
+       "duplicate load page acknowledged without reapply")
  check(bank_checksum(bank_audio_base)==mutated_crc,"partial page preserves live bank")
  io_wait=600
  project_io_update()
@@ -105,6 +118,21 @@ function _init()
  emit_saved_page(1,first_length,false)
  check(io_mode=="idle" and io_frame_valid(io_error),"out-of-order page rejected")
  check(bank_checksum(bank_audio_base)==mutated_crc,"out-of-order page preserves live bank")
+
+ check(bank_copy(bank_stage_base,bank_snapshot_base),"profile mutation stage copy")
+ poke(io_header+56,1)
+ refresh_saved_envelope_crc()
+ check(load_song(),"profile mutation load starts")
+ io_load_complete=true
+ io_begin_frame(io_commit_load,io_id,0,0,io_envelope_size,0,0)
+ io_finish_frame()
+ project_io_update()
+ check(io_mode=="idle" and io_frame_valid(io_error),
+       "checksum-valid unknown source selection rejected")
+ check(bank_checksum(bank_audio_base)==mutated_crc,
+       "profile mutation preserves live bank")
+ poke(io_header+56,0)
+ refresh_saved_envelope_crc()
 
  check(load_song(),"valid load starts")
  local offset=0

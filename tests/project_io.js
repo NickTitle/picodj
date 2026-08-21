@@ -82,6 +82,16 @@ assert.equal(io.loadLastKnownGood(), null, 'corrupt stored envelope is rejected'
 assert.equal(io.storeLastKnownGood(envelope), true);
 const stableRecord = localStorage.getItem(io.key);
 
+const wrongSelection = envelope.slice();
+wrongSelection[56] = 1;
+put16(wrongSelection, 10, 0);
+put16(wrongSelection, 10, io.crc16(wrongSelection, 0, wrongSelection.length, 10, 12));
+assert.equal(io.envelopeValid(wrongSelection), false,
+  'checksum-valid unknown source selection is rejected');
+assert.equal(io.storeLastKnownGood(wrongSelection), false);
+assert.equal(localStorage.getItem(io.key), stableRecord,
+  'unknown source selection preserves last known good');
+
 io.writeFrame(gpio, io.commands.loadRequest, 1, 0, 0, envelope.length);
 assert.equal(gpio[14] | (gpio[15] << 8), 0x4bca, 'GPIO CRC matches cartridge vector');
 
@@ -112,10 +122,16 @@ localStorage.setItem(io.key, stableRecord);
 for (let offset = 0, sequence = 0; offset < envelope.length; sequence++) {
   const length = Math.min(112, envelope.length - offset);
   const flags = (offset === 0 ? 1 : 0) | (offset + length === envelope.length ? 2 : 0) | 4;
-  io.writeFrame(gpio, io.commands.savePage, 9, sequence & 255, offset, envelope.length,
-    envelope.slice(offset, offset + length), flags);
+  const payload = envelope.slice(offset, offset + length);
+  io.writeFrame(gpio, io.commands.savePage, 9, sequence & 255, offset, envelope.length, payload, flags);
   pumpProjectBridge();
   assert.equal(io.frameValid(gpio, io.commands.ack), true, `save page ${sequence} acknowledged`);
+  if (sequence === 2) {
+    io.writeFrame(gpio, io.commands.savePage, 9, sequence, offset, envelope.length, payload, flags);
+    pumpProjectBridge();
+    assert.equal(io.frameValid(gpio, io.commands.ack), true,
+      'duplicate non-first save page is idempotently acknowledged');
+  }
   offset += length;
 }
 assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope));
@@ -138,8 +154,12 @@ assert.equal(loadPages, 42);
 assert.equal(io.frameValid(gpio, io.commands.loadCommit), true);
 assert.deepEqual(Array.from(loaded), Array.from(envelope));
 
-io.writeFrame(gpio, io.commands.savePage, 11, 1, 112, envelope.length,
-  envelope.slice(112, 224), 4);
+io.writeFrame(gpio, io.commands.savePage, 11, 0, 0, envelope.length,
+  envelope.slice(0, 112), 5);
+pumpProjectBridge();
+assert.equal(io.frameValid(gpio, io.commands.ack), true);
+io.writeFrame(gpio, io.commands.savePage, 11, 2, 224, envelope.length,
+  envelope.slice(224, 336), 4);
 pumpProjectBridge();
 assert.equal(io.frameValid(gpio, io.commands.error), true, 'out-of-order save is rejected');
 assert.equal(localStorage.getItem(io.key), stableRecord, 'GPIO fault preserves durable slot');
