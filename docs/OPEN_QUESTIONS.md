@@ -11,10 +11,11 @@ seed the default; changing it must remain an explicit full-bank operation.
 
 ## Six-button SONG controls
 
-Tap X returns to the legacy sketch and Hold X opens the SONG context palette.
-O enters the selected channel's SFX view. The palette edits SFX/mute/flow as a
-staged full-byte transaction: O commits and X cancels. Pattern and channel
-navigation clamps at their native bounds; SFX values wrap from `3f` to `00`.
+SONG is the primary screen. O enters the selected channel's SFX view, tap X
+keeps the user in SONG, Hold O opens the project palette, and Hold X opens the
+SONG context palette. The context palette edits SFX/mute/flow as a staged
+full-byte transaction: O commits and X cancels. Pattern and channel navigation
+clamps at their native bounds; SFX values wrap from `3f` to `00`.
 
 ## Native project I/O
 
@@ -27,10 +28,10 @@ save or load.
 
 ## Legacy sketch
 
-The four-channel, sixteen-step grid remains visible as a reference, but all of
-its bank rebuild and audition writes are quarantined. It is not an alternate
-authoritative editor. A later HOME design can remove it after native SONG and
-SFX navigation fully replace it.
+Nick chose the native-first design on 2026-08-23. The four-channel,
+sixteen-step grid is removed from the shipped cartridge now that SONG and SFX
+fully replace its navigation and editing. Its old behavior remains only in
+`tests/legacy_tracker.lua` so regression tests do not enlarge production code.
 
 ## SFX handoff
 

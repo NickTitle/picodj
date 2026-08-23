@@ -1,5 +1,42 @@
 -- Test-only fixture for the pre-native 78-byte sketch implementation.
 save_size,save_addr,gpio_addr=78,0x5e00,0x5f80
+steps,tracks,slot_count=16,4,3
+note_names={"c-","c#","d-","d#","e-","f-","f#","g-","g#","a-","a#","b-"}
+menu_names={"play","save","load","slot","bpm","wave","vol","fx","export"}
+wave_names={"tri","tilt","saw","sqr","pulse","organ","noise","phase"}
+
+function fresh_song()
+ notes={}
+ last_notes={24,24,24,24}
+ waves={0,2,3,6}
+ volumes={5,4,4,3}
+ effects={0,0,0,0}
+ bpm=120
+ for ch=1,tracks do
+  notes[ch]={}
+  for step=1,steps do notes[ch][step]=-1 end
+ end
+ local seed={24,-1,31,-1,27,-1,31,-1,24,-1,31,-1,29,-1,31,-1}
+ for i=1,steps do notes[1][i]=seed[i] end
+ for i=1,steps,4 do notes[2][i]=12 end
+ for i=3,steps,4 do notes[2][i]=19 end
+ for i=1,steps,2 do notes[4][i]=(i%4==1) and 8 or 5 end
+end
+
+function note_word(note)
+ if note<0 then return "---" end
+ return note_names[note%12+1]..flr(note/12)
+end
+
+function toggle_rest()
+ local note=notes[cursor_ch][cursor_step]
+ if note<0 then notes[cursor_ch][cursor_step]=last_notes[cursor_ch]
+ else last_notes[cursor_ch]=note notes[cursor_ch][cursor_step]=-1 end
+ rebuild_track(cursor_ch)
+end
+
+function say(text) notice=text end
+function activate_menu(secondary) activate_named(menu_names[menu_item],secondary) end
 
 function sfx_speed() return mid(1,flr(1920/bpm+0.5),255) end
 

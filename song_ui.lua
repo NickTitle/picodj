@@ -4,30 +4,6 @@ song_expected_crc,song_rows=0x2a23,10
 song_menu_items={"sfx","mute","flow","undo","play","follow"}
 song_flow_names={"loop","back","stop","reserved"}
 
-legacy_init=_init
-legacy_update60=_update60
-legacy_draw=_draw
-legacy_context_label=context_label
-
--- The four-by-sixteen prototype remains a shadow sketch. It must never write
--- the native bank now that SONG is authoritative.
-function rebuild_track() end
-function rebuild_all() end
-function audition() end
-
-function context_label(name)
- if name=="flow" then return song_flow_names[song_channel+1] end
- if name=="follow" then return play_follow and "follow on" or "follow off" end
- if name=="undo" then
-  return undo_owner==(context_menu=="sfx" and "sfx" or "song") and "undo" or "undo -"
- end
- if name=="preview" then return audition_active and "stop preview" or "preview" end
- if name=="save" or name=="load" or name=="json" or name=="wav" then
-  return name.." - native pending"
- end
- return legacy_context_label(name)
-end
-
 native_music=music
 native_sfx=sfx
 native_stat=stat
@@ -277,9 +253,12 @@ function update_song_screen()
 end
 
 function _init()
- legacy_init()
  bank_project_init()
- app_view="grid"
+ app_view="song"
+ context_menu,context_item,context_gate,action_gate=nil,1,false,false
+ reset_action_input()
+ playing,play_tick,play_step=false,0,1
+ notice,notice_tick="native song",120
  song_pattern,song_channel,song_scroll=0,0,0
  edit_owner,undo_owner,song_error=nil,nil,nil
  audition_active,audition_restart=false,false
@@ -291,18 +270,10 @@ function _init()
 end
 
 function _update60()
- if app_view=="grid" then return legacy_update60() end
  update_playhead()
  if notice_tick>0 then notice_tick-=1 end
  if app_view=="song" then update_song_screen()
  else update_sfx_handoff() end
-end
-
-function draw_header()
- rectfill(0,0,127,8,1)
- print("legacy sketch",2,2,7)
- print(song_error and "!" or (playing and "play" or "stop"),82,2,song_error and 8 or (playing and 11 or 6))
- print(bank_dirty and "*" or "-",118,2,bank_dirty and 8 or 5)
 end
 
 function song_status()
@@ -339,7 +310,7 @@ function draw_song_screen()
   end
  end
  print("dpad move o sfx hold x menu",4,101,5)
- print("tap x back",44,109,6)
+ print("hold o project",35,109,6)
  if edit_owner=="song" then draw_edit() end
 end
 
@@ -347,6 +318,5 @@ function _draw()
  if app_view=="song" then
   draw_song_screen()
   if context_menu then draw_context_menu() end
- elseif app_view=="sfx" then draw_sfx_handoff()
- else legacy_draw() end
+ else draw_sfx_handoff() end
 end
