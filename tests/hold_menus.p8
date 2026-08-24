@@ -4,6 +4,8 @@ __lua__
 #include ../tracker.lua
 
 failures=0
+song_menu_items={"sfx","mute","flow","undo","play","follow"}
+sfx_menu_items={"preview","metadata","rest","undo","prev sfx","next sfx"}
 
 function check(ok,label)
  if ok then return end
@@ -11,25 +13,23 @@ function check(ok,label)
  printh("fail: "..label)
 end
 
-function rebuild_track() end
-function publish_gpio() end
-function audition() end
+function save_song() save_calls+=1 end
+function load_song() load_calls+=1 end
+function toggle_song() play_calls+=1 end
+function song_open_sfx() sfx_open_calls+=1 app_view="sfx" end
+function song_return_from_sfx() return_calls+=1 app_view="song" end
+function sfx_begin_row_edit() edit_calls+=1 end
+function sfx_begin_meta_edit() edit_calls+=1 end
+function sfx_toggle_rest() rest_calls+=1 end
 
-function reset_fixture(note)
- fresh_song()
- notes[1][1]=note
- last_notes[1]=note
- slot=1
- cursor_ch=1
- cursor_step=1
- menu_item=1
- context_menu=nil
- context_item=1
- context_gate=false
- action_gate=false
- playing=false
+function reset_fixture(view)
+ app_view=view or "song"
+ context_menu,context_item,context_gate,action_gate=nil,1,false,false
+ playing,play_follow=false,true
+ save_calls,load_calls,play_calls=0,0,0
+ sfx_open_calls,return_calls,edit_calls,rest_calls=0,0,0,0
+ sfx_mode="rows"
  notice=""
- notice_tick=0
  reset_action_input()
 end
 
@@ -38,66 +38,48 @@ function release_context_gate()
 end
 
 function _init()
- -- A quick O/X press defers its edit until release and fires exactly once.
- reset_fixture(24)
+ -- Native SONG is primary: quick O enters SFX and quick X cannot reveal GRID.
+ reset_fixture("song")
  update_action_buttons(true,false)
- check(notes[1][1]==24,"o tap waits for release")
+ check(sfx_open_calls==0,"o tap waits for release")
  update_action_buttons(false,false)
- check(notes[1][1]==25,"o tap raises once")
- update_action_buttons(false,false)
- check(notes[1][1]==25,"o idle does not repeat")
-
- reset_fixture(24)
+ check(sfx_open_calls==1 and app_view=="sfx","o tap opens selected sfx")
+ reset_fixture("song")
  update_action_buttons(false,true)
- check(notes[1][1]==24,"x tap waits for release")
  update_action_buttons(false,false)
- check(notes[1][1]==23,"x tap lowers once")
+ check(app_view=="song","song x tap stays native")
 
- -- Holding O opens Start without leaking the normal note edit.
- reset_fixture(24)
+ -- Hold O opens project actions from SONG without leaking the SFX tap.
+ reset_fixture("song")
  for i=1,hold_frames do update_action_buttons(true,false) end
- check(context_menu=="start","o hold opens start menu")
- check(context_gate,"start menu waits for release")
- check(notes[1][1]==24,"o hold preserves note")
- update_context_menu(true,false,false,false,false,false,false,false)
- check(context_gate,"held opener remains gated")
+ check(context_menu=="start" and context_gate,"o hold opens project menu")
+ check(sfx_open_calls==0,"o hold does not open sfx")
  release_context_gate()
- check(not context_gate,"released opener clears gate")
  update_context_menu(false,false,false,false,false,false,false,true)
- check(context_item==2,"start menu moves down")
- update_context_menu(false,true,false,true,false,false,false,false)
- check(context_menu==nil and action_gate,"x cancels start menu")
+ check(context_item==2,"project menu reaches save")
+ update_context_menu(false,false,true,false,false,false,false,false)
+ check(save_calls==1 and context_menu==nil,"project save action")
 
- -- Holding X opens Select; its channel values adjust in place.
- reset_fixture(24)
+ -- Hold X opens the current native context without leaking a back action.
+ reset_fixture("song")
  for i=1,hold_frames do update_action_buttons(false,true) end
- check(context_menu=="select","x hold opens select menu")
- check(notes[1][1]==24,"x hold preserves note")
- release_context_gate()
- update_context_menu(false,false,false,false,false,false,false,true)
- check(context_item==2,"select menu moves to rest")
- update_context_menu(false,false,false,false,false,false,false,true)
- check(context_item==3,"select menu moves to wave")
- local wave=waves[1]
- update_context_menu(false,false,false,false,false,true,false,false)
- check(waves[1]==(wave+1)%8,"select right raises value")
- check(context_menu=="select","select edit keeps menu open")
+ check(context_menu=="song" and context_gate,"x hold opens song menu")
+ close_context_menu()
+ check(app_view=="song" and action_gate,"song menu closes release gated")
 
- -- The optional O+X chord remains a single rest toggle, never a hold menu.
- reset_fixture(24)
+ -- The SFX chord remains one rest toggle and quick X returns to SONG.
+ reset_fixture("sfx")
  update_action_buttons(true,true)
- check(notes[1][1]==-1,"chord toggles rest")
  for i=1,hold_frames+2 do update_action_buttons(true,true) end
- check(notes[1][1]==-1,"held chord does not repeat")
- check(context_menu==nil,"held chord opens no menu")
+ check(rest_calls==1 and context_menu==nil,"sfx chord toggles rest once")
  update_action_buttons(false,false)
- check(notes[1][1]==-1,"chord release fires no tap")
+ reset_action_input()
+ update_action_buttons(false,true)
+ update_action_buttons(false,false)
+ check(return_calls==1 and app_view=="song","sfx x tap returns to song")
 
- if failures==0 then
-  printh("pocket tracker hold menus: passed")
- else
-  printh("pocket tracker hold menus: failed "..failures)
- end
+ if failures==0 then printh("pocket tracker hold menus: passed")
+ else printh("pocket tracker hold menus: failed "..failures) end
  extcmd("shutdown")
 end
 

@@ -28,8 +28,7 @@ function song_commit_edit() return edit_commit() end
 function reset_ui()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
  bank_project_init()
- fresh_song()
- app_view="grid"
+ app_view="song"
  context_menu=nil
  context_item=1
  context_gate=false
@@ -62,23 +61,18 @@ function _init()
  check(bank_song_raw(0,0)==0x81 and bank_song_raw(0,1)==0x82 and
        bank_song_raw(0,2)==3 and bank_song_raw(0,3)==4,
        "main cartridge pattern 00")
- check(app_view=="grid" and song_error==nil and not bank_dirty and
+ check(app_view=="song" and song_error==nil and not bank_dirty and
        bank_revision==0,"main initialization accepts canonical seed")
- local boot_crc=bank_checksum(bank_audio_base)
- rebuild_all()
- audition(1,24)
- check(bank_checksum(bank_audio_base)==boot_crc,
-       "legacy sketch cannot clobber bank")
  reset_ui()
 
- -- Hold X routes through the existing release-gated Select palette.
+ -- Native SONG is the primary boot screen; Hold X opens its own context.
  for i=1,hold_frames do update_action_buttons(false,true) end
- check(context_menu=="select" and context_item==1,
-       "hold x opens select at song")
+ check(context_menu=="song" and context_item==1,
+       "hold x opens native song context")
  update_context_menu(false,false,false,false,false,false,false,false)
- update_context_menu(false,false,true,false,false,false,false,false)
+ close_context_menu()
  check(app_view=="song" and action_gate,
-       "select song routes to native screen")
+       "song context returns to native screen")
 
  -- All 64 patterns and four channels are reachable without wraparound.
  action_gate=false reset_action_input()
@@ -213,7 +207,7 @@ function _init()
  check(song_pattern==63 and song_channel==3 and song_scroll==54,
        "sfx return preserves song cursor")
 
- -- SONG's own X hold opens context; a quick release returns without note edit.
+ -- SONG's own X hold opens context; a quick release stays on native SONG.
  reset_ui()
  app_view="song"
  for i=1,hold_frames do update_action_buttons(false,true) end
@@ -224,7 +218,7 @@ function _init()
  action_gate=false reset_action_input()
  update_action_buttons(false,true)
  update_action_buttons(false,false)
- check(app_view=="grid" and action_gate,"song tap x returns safely")
+ check(app_view=="song","song tap x stays native")
 
  if failures==0 then
   printh("pocket tracker song ui: passed")

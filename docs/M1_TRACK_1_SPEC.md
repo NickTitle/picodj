@@ -135,7 +135,8 @@ Status: implemented and cartridge-tested in the working tree.
 
 ### M1.2 — Minimum cartridge editor
 
-- HOME, SONG pattern 00, SFX slots 01..04, and FILE screens.
+- SONG pattern 00 as the primary screen, SFX slots 01..04, and the project
+  palette for playback and file operations.
 - SONG edits four channel SFX/mute fields and three flow flags.
 - SFX edits 32 rows of pitch/instrument/custom flag/volume/effect plus raw
   metadata, speed, and loop/LEN values.
@@ -246,9 +247,9 @@ Status: implemented and cartridge-tested in the working tree.
 | Test | Purpose | Current state |
 |---|---|---|
 | `tests/m1_track_1_fixture.p8` | Reload fixture; validate exact pattern bytes and SFX 1..4 raw rows/metadata. | Added; pass marker observed on PICO-8 0.2.7. |
-| Existing `tests/smoke.p8` | Documents/protects the eight-file prototype behavior. | Preserved unchanged. |
+| Existing `tests/smoke.p8` | Protects the former prototype behavior through a test-only legacy fixture. | Preserved. |
 | `tests/m1_bank.p8` | Accessor masks/boundaries, exact seed, profile, staging/commit/rollback/checksum, corruption, and waveform preservation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
-| `tests/hold_menus.p8` | Tap-versus-hold input, release gating, contextual Start/Select palettes, value adjustment, and O+X chord isolation. | Added; pass marker and status 0 on PICO-8 0.2.7. |
+| `tests/hold_menus.p8` | Native SONG/SFX tap-versus-hold input, release gating, project/context palettes, and O+X chord isolation. | Updated for the native-first UI; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/playback_transport.p8` | Profile idempotence, reversible SFX 63 preview, stop/restore/edit/restart, and complete `stat(46..57)` follow. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/m1_playback.p8` | Real native mixer start/channels plus stop and authored-bank restoration. | Added in M1.3; pass marker and status 0 on PICO-8 0.2.7. |
 | `tests/project_io.p8` | 42-page GPIO save/load, exact bank/metadata restore, corrupt/out-of-order/partial rollback. | Added in M1.4A. |
@@ -257,10 +258,10 @@ Status: implemented and cartridge-tested in the working tree.
 
 ## 8. Known blockers and owner choices
 
-- The generated outputs were deterministically regenerated from the current
-  source: `tracker.html` is SHA-256
+- At the M1.4A checkpoint, the generated outputs were deterministically
+  regenerated: `tracker.html` was SHA-256
   `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
-  and `tracker.js` is SHA-256
+  and `tracker.js` was SHA-256
   `1a2b59dd99a9a40d22a6fc8a83ef8d76e7f03a967042cbb15def7acfec6179db`.
   Any source change must still be followed by regeneration and exact-source
   verification before commit, publication, or release.
@@ -376,13 +377,14 @@ Merged M1.4A failed the real `pico8 -x pocket-tracker.p8` load path at exactly
 even though HTML export returned success. The earlier cartridges compiled
 feature slices and never included all five production Lua files together.
 
-The bounded correction removes only runtime-shadowed prototype bodies from
+At that correction checkpoint, the bounded change removed only
+runtime-shadowed prototype bodies from
 the shipped graph, preserves them in `tests/legacy_tracker.lua`, and shares
 the context-menu, hold/release, edit, undo, and modal-draw engines across GRID,
 SONG, and SFX. The fixed production graph measures exactly 7,928 tokens: 1,803
 fewer than merged M1.4A and 264 below the platform ceiling. The committed
 `tests/size_budget.p8` adds a calibrated 261-token probe to the exact production
-graph and must still emit `pocket tracker size budget: passed`.
+graph and emitted `pocket tracker size budget: passed`.
 
 ## 14. M1.4B browser file boundary
 
@@ -400,6 +402,26 @@ Pocket Tracker header as a labelled sidecar comment. Materialized output keeps
 patterns and all unrelated SFX bytes exact while applying the profile gain only
 to non-resting rows in SFX 1..4; it carries no required profile. Both codecs
 have deterministic repeated-output and field-aware decode regressions. No Lua
-source changed in this arc, so the production graph remains exactly 7,928
-tokens with 264 tokens of headroom and the calibrated full-cart gate remains
-unchanged.
+source changed in this arc, so the production graph remained exactly 7,928
+tokens with 264 tokens of headroom at that historical M1.4B checkpoint.
+
+## 15. M1.5 native-first reserve correction
+
+Nick selected the native-first option on 2026-08-23. The shipped legacy 4x16
+grid was removed and SONG now opens directly as the primary experience. The
+shared six-button layer retains only native SONG/SFX navigation, project and
+context palettes, release gating, and the SFX rest chord. Legacy behavior is
+kept solely in `tests/legacy_tracker.lua` for regression coverage.
+
+The exact five-file production graph now measures 6,492 tokens, 61 below the
+documented 6,553-token reserve gate and 1,700 below PICO-8's 8,192-token hard
+ceiling. The calibrated reserve test adds exactly 1,639 tokens, so it compiles
+at 8,131 tokens on this source and would reject a production graph above the
+gate. The exported production PXA header records 39,235 raw code bytes and
+10,061 compressed bytes, 2,227 below the 12,288-byte reserve gate.
+
+Two fresh browser exports were byte-identical, and the tracked artifacts match
+them exactly: `tracker.html` is SHA-256
+`858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and `tracker.js` is SHA-256
+`fad2d72a1120ade026b25ff6e5c9125e5c9f4379bcfb4261be87bd9b68ccbe4b`.
