@@ -219,7 +219,7 @@ function project_io_update()
   elseif io_frame_valid(io_ack) and peek(io_gpio+6)==io_id and
          peek(io_gpio+7)==io_sequence and io_get16(io_gpio+8)==io_offset then
    if io_page_last then
-    bank_mark_clean() io_mode="idle" io_emit_control(io_done,0)
+    bank_mark_clean() undo_owner=nil io_mode="idle" io_emit_control(io_done,0)
     song_error=nil say("browser slot saved")
    else
     io_offset+=io_page_length io_sequence=(io_sequence+1)%256

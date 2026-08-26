@@ -139,7 +139,7 @@ function _init()
   check_unrelated(before,after,0x40,"mute preserves bits "..ch)
  end
 
- -- One-step undo restores the complete old byte and its prior dirty state.
+ -- One-level history swaps exact bytes and dirty states in both directions.
  reset_ui()
  song_pattern=1
  song_channel=0
@@ -154,6 +154,33 @@ function _init()
  check(bank_song_raw(1,0)==before,"undo restores full byte")
  check(not bank_dirty and bank_revision==revision+1,
        "undo restores clean and advances revision")
+ revision=bank_revision
+ check(undo_width<0,"undo exposes redo phase")
+ check(song_begin_edit("sfx"),"begin cancel with redo")
+ edit_value=(edit_value+1)%64
+ song_cancel_edit()
+ check(undo_width<0 and bank_revision==revision,"cancel preserves redo")
+ check(song_begin_edit("sfx"),"begin no-op with redo")
+ check(song_commit_edit() and undo_width<0 and bank_revision==revision,
+       "no-op preserves redo")
+ check(song_undo(),"redo succeeds")
+ check(bank_song_raw(1,0)==after and bank_dirty and
+       bank_revision==revision+1 and undo_width>0,
+       "redo restores post byte dirty and advances revision")
+ revision=bank_revision
+ check(song_undo() and bank_song_raw(1,0)==before and not bank_dirty and
+       bank_revision==revision+1,"second undo restores pre state")
+
+ -- A new real edit replaces the available redo transaction.
+ local replacement_before=bank_song_raw(1,0)
+ check(song_begin_edit("sfx"),"begin replacement edit")
+ edit_value=(edit_value+1)%64
+ check(song_commit_edit() and undo_width>0,"new edit replaces redo phase")
+ local replacement_after=bank_song_raw(1,0)
+ check(song_undo() and bank_song_raw(1,0)==replacement_before,
+       "replacement undo restores its own pre byte")
+ check(song_undo() and bank_song_raw(1,0)==replacement_after,
+       "replacement redo restores its own post byte")
 
  -- Flow flags preserve every other bit; channel four remains reserved.
  for ch=0,2 do
@@ -191,6 +218,12 @@ function _init()
  check(#music_calls==3 and music_calls[2]==-1 and music_calls[3]==63,
        "edit uses stop restore restart")
  check(bank_song_raw(63,0)==(before^^0x40),"active edit is not dropped")
+ check(song_undo() and playing and bank_profile_is_active() and
+       bank_song_raw(63,0)==before and #music_calls==5,
+       "active undo stops restores swaps restarts")
+ check(song_undo() and playing and bank_profile_is_active() and
+       bank_song_raw(63,0)==(before^^0x40) and #music_calls==7,
+       "active redo stops restores swaps restarts")
  check(stop_song() and not bank_profile_is_active(),"native playback restores")
 
  -- O hands the exact selected SFX to Arc 2; X return keeps cursor/scroll.
