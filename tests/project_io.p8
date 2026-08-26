@@ -5,8 +5,7 @@ __lua__
 
 playing=false
 audition_active=false
-song_undo_valid=false
-sfx_undo_valid=false
+undo_owner=nil
 song_error=nil
 notice=""
 
@@ -68,10 +67,16 @@ function _init()
 
  check(bank_profile_apply(),"save test profile applies")
  playing=true
+ undo_owner="song"
  check(save_song(),"save starts")
  check(not playing and not bank_profile_is_active(),"save stops and restores authored bytes")
  check(io_mode=="save" and io_frame_valid(io_page_save),"save first frame")
  check(io_get16(io_gpio+10)==io_envelope_size,"save total length")
+ io_begin_frame(io_error,io_id,io_sequence,io_offset,io_envelope_size,0,9)
+ io_finish_frame()
+ project_io_update()
+ check(io_mode=="idle" and undo_owner=="song","failed save preserves history")
+ check(save_song(),"save retry starts")
  local pages=0
  while io_mode=="save" and pages<50 do
   local sequence=peek(io_gpio+7)
@@ -88,6 +93,7 @@ function _init()
  end
  check(pages==42 and io_mode=="idle","save sends 42 acknowledged pages")
  check(not bank_dirty and notice=="browser slot saved","save read-back ack gates success")
+ check(undo_owner==nil,"successful save clears history")
  check(io_get16(io_header+8)==saved_crc,"save header pins authored bank checksum")
 
  -- Preserve the saved bank as a fake browser peer, then mutate the live bank.
@@ -96,10 +102,13 @@ function _init()
  poke(bank_audio_base,saved_first^^0x55)
  local mutated_crc=bank_checksum(bank_audio_base)
 
+ undo_owner="sfx"
+ check(not load_song(false) and undo_owner=="sfx","cancelled load preserves history")
  check(load_song(),"load request starts")
  emit_saved_page(0,0,true)
  check(io_mode=="idle" and io_frame_valid(io_error),"corrupt gpio frame rejected")
  check(bank_checksum(bank_audio_base)==mutated_crc,"corrupt frame preserves live bank")
+ check(undo_owner=="sfx","failed load preserves history")
 
  check(load_song(),"partial load starts")
  local first_length=emit_saved_page(0,0,false)
@@ -154,6 +163,7 @@ function _init()
        "valid load restores exact authored bank")
  check(bank_revision==37 and not bank_dirty and not bank_snapshot_valid,
        "valid load restores metadata and clean state")
+ check(undo_owner==nil,"successful load clears history")
 
  if failures==0 then printh("pocket tracker project io: passed")
  else printh("pocket tracker project io: failed "..failures) end

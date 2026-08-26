@@ -30,6 +30,7 @@ function reset_fixture(view)
  sfx_open_calls,return_calls,edit_calls,rest_calls=0,0,0,0
  sfx_mode="rows"
  notice=""
+ undo_owner=nil undo_width=1
  reset_action_input()
 end
 
@@ -66,6 +67,17 @@ function _init()
  check(context_menu=="song" and context_gate,"x hold opens song menu")
  close_context_menu()
  check(app_view=="song" and action_gate,"song menu closes release gated")
+
+ -- The history row names the next available direction for each owner.
+ context_menu="song" undo_owner="song" undo_width=1
+ check(context_label("undo")=="undo","song undo label")
+ undo_width=-1
+ check(context_label("undo")=="redo","song redo label")
+ context_menu="sfx"
+ check(context_label("undo")=="undo -","other owner unavailable")
+ undo_owner="sfx"
+ check(context_label("undo")=="redo","sfx redo label")
+ context_menu=nil
 
  -- The SFX chord remains one rest toggle and quick X returns to SONG.
  reset_fixture("sfx")

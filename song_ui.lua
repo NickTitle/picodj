@@ -188,8 +188,15 @@ end
 
 function edit_undo(owner)
  if undo_owner!=owner then edit_error(owner,"nothing to undo") return false end
- local ok=song_restore_then(function() return edit_write(undo_addr,undo_width,undo_value) end)
- if ok then bank_dirty=undo_dirty undo_owner=nil edit_error(owner,nil) say("undone")
+ local width=abs(undo_width)
+ local value,dirty=nil,bank_dirty
+ local ok=song_restore_then(function()
+  value=width==1 and peek(undo_addr) or peek2(undo_addr)
+  return edit_write(undo_addr,width,undo_value)
+ end)
+ if ok then
+  undo_value=value bank_dirty=undo_dirty undo_dirty=dirty undo_width=-undo_width
+  edit_error(owner,nil) say(undo_width<0 and "undone" or "redone")
  else edit_error(owner,"undo rejected") end
  return ok
 end

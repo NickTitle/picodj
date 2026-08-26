@@ -14,11 +14,11 @@ coverage; it is not included in the production cartridge.
   Left/Right chooses channel, and O opens the selected channel's native SFX.
 - Hold O from either native screen opens the project palette for playback,
   save, and load. Up/Down chooses, O activates, and X closes.
-- Hold X in SONG for SFX/mute/flow edits, one-step undo, and native playback.
+- Hold X in SONG for SFX/mute/flow edits, one-level undo/redo, and native playback.
   Left/Right stages a value, O commits, and X cancels without changing bytes.
 - In SFX, Up/Down scrolls all 32 rows and Left/Right selects pitch,
   instrument, built/custom mode, volume, or effect. O edits and tap X returns
-  to the same SONG position. Hold X opens rest, undo, metadata, and SFX-slot
+  to the same SONG position. Hold X opens rest, undo/redo, metadata, and SFX-slot
   navigation. Metadata exposes all four raw bytes plus speed and loop/LEN.
   Waveform slots remain byte-exact, visibly read-only native data.
   Hold X also previews the selected row from row mode or the complete SFX from
@@ -34,6 +34,10 @@ after browser-storage read-back succeeds; load stages every page and commits
 only after the frame, envelope, and bank checksums agree. JSON/WAV actions
 inside the cartridge remain disabled because the older 78-byte format cannot
 safely represent native edits.
+
+Undo and redo preserve the exact edited byte or word and its dirty state.
+A new edit replaces redo history. Successful save and load establish a new
+clean baseline and clear history; failed transfers leave history available.
 
 ## Browser exports
 

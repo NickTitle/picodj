@@ -115,7 +115,8 @@ function context_label(name)
  if name=="flow" then return song_flow_names[song_channel+1] end
  if name=="follow" then return play_follow and "follow on" or "follow off" end
  if name=="undo" then
-  return undo_owner==(context_menu=="sfx" and "sfx" or "song") and "undo" or "undo -"
+  if undo_owner!=(context_menu=="sfx" and "sfx" or "song") then return "undo -" end
+  return undo_width<0 and "redo" or "undo"
  end
  if name=="preview" then return audition_active and "stop preview" or "preview" end
  return name
