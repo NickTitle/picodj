@@ -65,7 +65,8 @@ last-known-good project slot. Save in the tracker first, then choose one of:
 - valid `.p8` audio in **authored + profile** mode, with the exact bank and a
   Pocket Tracker sidecar header;
 - valid `.p8` audio in **materialized playback** mode, with the Track 1 gain
-  profile applied only to exported SFX 1–4.
+  profile applied only to conventional rows in exported SFX 1–4. Classified
+  waveform slots keep all 64 samples and all four metadata bytes exact.
 
 JSON import validates every field, range, checksum, and exact key set before it
 atomically replaces the durable browser slot. It never writes live cartridge

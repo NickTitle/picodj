@@ -95,6 +95,51 @@ function _init()
  ck(seen[57],"stat 57")
  stop_song()
 
+ -- Profile-range waveforms stay exact through apply, edits, restart, and restore.
+ local prior=snap(bank_audio_base,bank_size)
+ local prior_dirty,prior_revision=bank_dirty,bank_revision
+ reload(bank_stage_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform.p8")
+ for slot in all({1,4}) do
+  memcpy(bank_sfx_addr(slot,0),bank_stage_base+0x100,bank_sfx_size)
+ end
+ poke2(bank_sfx_addr(2,0),0x0a18)
+ poke2(bank_sfx_addr(3,0),0x0e18)
+ poke2(bank_sfx_addr(8,0),0x8a58)
+ local wave=snap(bank_audio_base,bank_size)
+ bank_project_init()
+ calls=#music_calls
+ ck(start_song(0) and start_song(0) and #music_calls==calls+1,
+  "waveform profile play idempotent")
+ for slot in all({1,4}) do
+  for i=0,67 do
+   ck(peek(bank_sfx_addr(slot,i))==wave[0x100+slot*68+i+1],
+    "playing waveform exact "..slot..":"..i)
+  end
+ end
+ ck((peek2(bank_sfx_addr(2,0))&0xffff)==0x0e18 and
+  (peek2(bank_sfx_addr(3,0))&0xffff)==0x0e18,
+  "playing conventional siblings boost and cap")
+ local wave_addr=bank_sfx_addr(1,0) local wave_old=peek(wave_addr)
+ calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(wave_addr,1,wave_old^^1) end),
+  "profile waveform sample edit")
+ wave[0x100+68+1]=wave_old^^1
+ ck(#music_calls==calls+2 and peek(wave_addr)==(wave_old^^1) and
+  bank_revision==revision+1 and bank_profile_is_active(),
+  "profile waveform sample restart exact")
+ local wave_bass=bank_sfx_addr(1,65) local bass_old=peek(wave_bass)
+ calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(wave_bass,1,bass_old^^1) end),
+  "profile waveform bass edit")
+ wave[0x100+68+66]=bass_old^^1
+ ck(#music_calls==calls+2 and peek(wave_bass)==(bass_old^^1) and
+  bank_revision==revision+1 and bank_profile_is_active(),
+  "profile waveform bass restart exact")
+ stop_song()
+ ck(same(bank_audio_base,wave,bank_size),"profile waveform complete restore")
+ for i=0,bank_size-1 do poke(bank_audio_base+i,prior[i+1]) end
+ bank_dirty,bank_revision=prior_dirty,prior_revision
+
  -- Session-only audition mix owns no project state and uses exact native masks.
  local bank=snap(bank_audio_base,bank_size)
  local dirty,revision,owner,width=bank_dirty,bank_revision,undo_owner,undo_width

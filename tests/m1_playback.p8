@@ -17,6 +17,11 @@ function finish()
 end
 function _init()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
+ reload(bank_stage_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform.p8")
+ memcpy(bank_sfx_addr(1,0),bank_stage_base+0x100,bank_sfx_size)
+ poke2(bank_sfx_addr(8,0),0x8a58)
+ local pattern=bank_song_addr(0,0)
+ poke(pattern,(peek(pattern)&0xc0)|8)
  bank_project_init()
  playing=false audition_active=false song_pattern=0 song_play_pattern=0
  song_channel=0 song_scroll=0 app_view="song" play_follow=true
@@ -29,7 +34,8 @@ function _update60()
  frames+=1
  if frames==8 then
   ck(stat(57) and stat(54)==0,"native music active")
-  for ch=0,3 do ck(stat(46+ch)==ch+1,"native channel "..ch) end
+  ck(stat(46)==8,"native custom waveform reference")
+  for ch=1,3 do ck(stat(46+ch)==ch+1,"native channel "..ch) end
   finish()
  end
 end
