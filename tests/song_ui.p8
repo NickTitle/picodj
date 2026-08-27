@@ -17,13 +17,14 @@ function check(ok,label)
  printh("fail: "..label)
 end
 
-function native_music(pattern)
- add(music_calls,pattern)
+function native_music(pattern,fade,mask)
+ add(music_calls,{pattern,fade,mask})
 end
 
 function song_edit_candidate(delta) edit_value=(edit_value+delta)%64 end
 function song_cancel_edit() edit_cancel() end
 function song_commit_edit() return edit_commit() end
+function song_undo() return edit_undo("song") end
 
 function reset_ui()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
@@ -39,10 +40,8 @@ function reset_ui()
  edit_owner=nil undo_owner=nil
  song_error=nil
  playing=false
- play_tick=0
  play_step=1
- notice=""
- notice_tick=0
+ song_mix,song_mix_channel,song_mix_stage,song_active=0,0,0,"a----"
  music_calls={}
  reset_action_input()
 end
@@ -61,8 +60,9 @@ function _init()
  check(bank_song_raw(0,0)==0x81 and bank_song_raw(0,1)==0x82 and
        bank_song_raw(0,2)==3 and bank_song_raw(0,3)==4,
        "main cartridge pattern 00")
- check(app_view=="song" and song_error==nil and not bank_dirty and
-       bank_revision==0,"main initialization accepts canonical seed")
+check(app_view=="song" and song_error==nil and not bank_dirty and
+       bank_revision==0 and song_mix==0 and song_active=="a----",
+       "main initialization accepts canonical seed")
  reset_ui()
 
  -- Native SONG is the primary boot screen; Hold X opens its own context.
@@ -209,13 +209,14 @@ function _init()
  song_pattern=63
  song_channel=0
  check(start_song(),"native playback starts")
- check(playing and bank_profile_is_active() and music_calls[1]==63,
+ check(playing and bank_profile_is_active() and music_calls[1][1]==63 and
+       music_calls[1][3]==0xf,
        "music pattern and profile active")
  before=bank_song_raw(63,0)
  check(song_begin_edit("mute"),"begin edit during play")
  check(song_commit_edit(),"commit edit during play")
  check(playing and bank_profile_is_active(),"playback restarts")
- check(#music_calls==3 and music_calls[2]==-1 and music_calls[3]==63,
+ check(#music_calls==3 and music_calls[2][1]==-1 and music_calls[3][1]==63,
        "edit uses stop restore restart")
  check(bank_song_raw(63,0)==(before^^0x40),"active edit is not dropped")
  check(song_undo() and playing and bank_profile_is_active() and

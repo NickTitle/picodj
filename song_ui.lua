@@ -1,7 +1,7 @@
 -- native song/pattern screen
 
 song_expected_crc,song_rows=0x2a23,10
-song_menu_items=split"sfx,mute,flow,undo,play,follow"
+song_menu_items=split"sfx,mute,flow,mix,undo,play,follow"
 song_flow_names=split"loop,back,stop,reserved"
 
 native_music=music
@@ -16,14 +16,13 @@ function start_song(pattern)
   return false
  end
  song_play_pattern=pattern or song_pattern
- native_music(song_play_pattern)
+ native_music(song_play_pattern,nil,song_mix==2 and 1<<song_mix_channel or
+  0xf^^(song_mix<<song_mix_channel))
  playing=true
  audition_restart=false
  transport_tick=0
- play_tick=0
  play_step=1
  song_error=nil
- say("playing pattern "..hex2(song_play_pattern))
  return true
 end
 
@@ -32,8 +31,20 @@ function stop_song()
  native_music(-1)
  bank_profile_restore()
  playing=false
- say("stopped")
+ song_active="a----"
  return true
+end
+
+function song_mix_label(mode,channel)
+ return mode==0 and "all" or sub("ms",mode,mode)..(channel+1)
+end
+
+function song_mix_apply()
+ song_mix,song_mix_channel=song_mix_stage,song_channel
+ if playing then
+  stop_song()
+  start_song(song_play_pattern)
+ end
 end
 
 function start_audition(row_only)
@@ -53,7 +64,6 @@ function start_audition(row_only)
  native_sfx(bank_audition_sfx,bank_audition_channel,0,row_only!=nil and 1 or nil)
  song_error=nil
  sfx_error=nil
- say("sfx preview")
  return true
 end
 
@@ -69,19 +79,12 @@ function stop_audition(restart)
  return true
 end
 
-function toggle_audition(row_only)
- if audition_active then return stop_audition(true) end
- return start_audition(row_only)
-end
-
 function toggle_song()
- if playing then return stop_song() end
- return start_song()
+ return playing and stop_song() or start_song()
 end
 
 function update_playhead()
  transport_tick+=1
- play_tick+=1
  if audition_active then
   audition_tick+=1
   local current=native_stat(46+bank_audition_channel)
@@ -92,12 +95,12 @@ function update_playhead()
  end
  if not playing or transport_tick<=2 then return end
  if not native_stat(57) then stop_song() return end
- play_pattern=native_stat(54)
- play_count=native_stat(55)
- play_ticks=native_stat(56)
+ song_play_pattern=native_stat(54)
+ song_active="a"
  for channel=0,3 do
   local current=native_stat(46+channel)
   local row=native_stat(50+channel)
+  song_active..=current>=0 and channel+1 or "-"
   if channel==song_channel then play_step=mid(0,row,31)+1 end
   if play_follow and app_view=="sfx" and current==sfx_number then
    sfx_row=mid(0,row,bank_row_count-1)
@@ -105,22 +108,17 @@ function update_playhead()
   end
  end
  if play_follow then
-  song_pattern=mid(0,play_pattern,bank_pattern_count-1)
+  song_pattern=mid(0,song_play_pattern,bank_pattern_count-1)
   song_keep_visible()
  end
 end
 
 function hex2(value)
- local digits="0123456789abcdef"
- return sub(digits,flr(value/16)+1,flr(value/16)+1)..
-        sub(digits,value%16+1,value%16+1)
+ return sub(tostr(value,true),5,6)
 end
 
 function song_keep_visible()
- if song_pattern<song_scroll then song_scroll=song_pattern end
- if song_pattern>=song_scroll+song_rows then
-  song_scroll=song_pattern-song_rows+1
- end
+ song_scroll=mid(song_pattern-song_rows+1,song_scroll,song_pattern)
  song_scroll=mid(0,song_scroll,bank_pattern_count-song_rows)
 end
 
@@ -156,7 +154,6 @@ function edit_begin(owner,addr,width,old,keep,shift,max_value,label)
 end
 
 function edit_cancel()
- local owner=edit_owner
  edit_owner=nil
  action_gate=true reset_action_input()
 end
@@ -189,7 +186,7 @@ function edit_undo(owner)
  end)
  if ok then
   undo_value=value bank_dirty=undo_dirty undo_dirty=dirty undo_width=-undo_width
-  edit_error(owner,nil) say(undo_width<0 and "undone" or "redone")
+  edit_error(owner,nil)
  else edit_error(owner,"undo rejected") end
  return ok
 end
@@ -218,8 +215,6 @@ function song_begin_edit(field)
  if field!="sfx" then edit_value=1-edit_value end
  return ok
 end
-
-function song_undo() return edit_undo("song") end
 
 function song_open_sfx()
  sfx_pattern=song_pattern
@@ -259,13 +254,13 @@ function _init()
  app_view="song"
  context_menu,context_item,context_gate,action_gate=nil,1,false,false
  reset_action_input()
- playing,play_tick,play_step=false,0,1
- notice,notice_tick="native song",120
+ playing,play_step=false,1
  song_pattern,song_channel,song_scroll=0,0,0
  edit_owner,undo_owner,song_error=nil,nil,nil
  audition_active,audition_restart=false,false
- transport_tick,play_pattern,play_count,play_ticks=0,0,0,0
+ transport_tick=0
  play_follow=true
+ song_mix,song_mix_channel,song_mix_stage,song_active=0,0,0,"a----"
  if (bank_checksum(bank_audio_base)&0xffff)!=song_expected_crc then
   song_error="native seed mismatch"
  end
@@ -273,22 +268,22 @@ end
 
 function _update60()
  update_playhead()
- if notice_tick>0 then notice_tick-=1 end
  if app_view=="song" then update_song_screen()
  else update_sfx_screen() end
 end
 
 function song_status()
- local text=playing and "p"..hex2(play_pattern).." r"..hex2(play_step-1) or
+ local text=playing and "p"..hex2(song_play_pattern).." r"..hex2(play_step-1) or
   (audition_active and "preview" or "stop "..hex2(song_pattern))
  text..=bank_dirty and " dirty" or " clean"
+ text..=" "..song_mix_label(song_mix,song_mix_channel).." "..song_active
  if song_error then text="! "..song_error end
  return text
 end
 
 function flow_glyph(pattern,channel)
- if channel==3 then return "r" end
- return bank_pattern_flag(pattern,channel) and sub("lbs",channel+1,channel+1) or "-"
+ return (channel==3 or bank_pattern_flag(pattern,channel)) and
+  sub("lbsr",channel+1,channel+1) or "-"
 end
 
 function draw_song_screen()
@@ -306,9 +301,8 @@ function draw_song_screen()
   for ch=0,3 do
    local x=25+ch*24
    if pattern==song_pattern and ch==song_channel then rect(x-2,y-2,x+19,y+6,10) end
-   local muted=bank_pattern_muted(pattern,ch)
-   local cell=hex2(bank_pattern_sfx(pattern,ch))..(muted and "m" or "-")..flow_glyph(pattern,ch)
-   print(cell,x,y,ch+8)
+   print(hex2(bank_pattern_sfx(pattern,ch))..
+    (bank_pattern_muted(pattern,ch) and "m" or "-")..flow_glyph(pattern,ch),x,y,ch+8)
   end
  end
  print("dpad move o sfx hold x menu",4,101,5)

@@ -19,6 +19,7 @@ function reset_player(pattern)
  playing=false audition_active=false song_pattern=pattern song_play_pattern=pattern
  song_channel=0 song_scroll=0 app_view="song" play_follow=false
  transport_tick=0 play_tick=0 song_error=nil
+ song_mix,song_mix_channel=0,0
  max_tick=-1 max_right_row=-1 max_len_row=-1
  ck(start_song(pattern),"start pattern "..pattern)
 end

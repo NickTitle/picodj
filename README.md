@@ -14,8 +14,10 @@ coverage; it is not included in the production cartridge.
   Left/Right chooses channel, and O opens the selected channel's native SFX.
 - Hold O from either native screen opens the project palette for playback,
   save, and load. Up/Down chooses, O activates, and X closes.
-- Hold X in SONG for SFX/mute/flow edits, one-level undo/redo, and native playback.
-  Left/Right stages a value, O commits, and X cancels without changing bytes.
+- Hold X in SONG for SFX/mute/flow edits, session-only audition mix,
+  one-level undo/redo, and native playback. On the mix row, Left/Right stages
+  all, mute selected channel, or solo selected channel; O applies and X
+  cancels. Other edits retain their staged O-commit/X-cancel behavior.
 - In SFX, Up/Down scrolls all 32 rows and Left/Right selects pitch,
   instrument, built/custom mode, volume, or effect. O edits and tap X returns
   to the same SONG position. Hold X opens rest, undo/redo, metadata, named
@@ -27,8 +29,13 @@ coverage; it is not included in the production cartridge.
   is restored byte-for-byte on stop.
 - O+X toggles the selected SFX row between a note and a rest.
 
-SONG playback uses native `music(pattern)` and the reversible Track 1 playback
-profile. Optional follow reads PICO-8's native `stat(46..57)` mixer state.
+SONG playback uses native `music(pattern, nil, channel_mask)` and the reversible
+Track 1 playback profile. Audition mix defaults to all channels, survives
+stop/start and SFX-preview resume for the session, and never changes authored
+mute bits or saved/exported project data. Applying a new mix while playing
+restarts the observed pattern at row 0. SONG shows `all`, `mN`, or `sN` plus a
+textual four-channel active mask derived from PICO-8's native `stat(46..49)`;
+optional follow retains the selected-channel row and native pattern behavior.
 Save and load use one browser last-known-good slot containing a checksummed
 v2 envelope and the complete 4,608-byte authored bank. Save is reported only
 after browser-storage read-back succeeds; load stages every page and commits
