@@ -7,6 +7,7 @@ bank_audition_sfx,bank_audition_channel=63,3
 
 bank_pattern_count,bank_channel_count,bank_sfx_count=64,4,64
 bank_row_count,bank_sfx_size=32,68
+bank_filter_steps={2,4,8,24,72}
 
 function bank_int(v,lo,hi)
  return type(v)=="number" and v==flr(v) and v>=lo and v<=hi
@@ -169,60 +170,13 @@ function bank_note_authored_raw(sfx,row)
  return bank_note_raw(sfx,row)
 end
 
-function bank_note_pitch(sfx,row)
- local value=bank_note_raw(sfx,row)
- return value and value&0x3f or nil
-end
-
-function bank_note_instrument(sfx,row)
- local value=bank_note_raw(sfx,row)
- return value and (value>>6)&7 or nil
-end
-
-function bank_note_custom(sfx,row)
- local value=bank_note_raw(sfx,row)
- if value==nil then return nil end
- return (value&0x8000)!=0
-end
-
-function bank_note_volume(sfx,row)
- local value=bank_note_raw(sfx,row)
- return value and (value>>9)&7 or nil
-end
-
-function bank_note_effect(sfx,row)
- local value=bank_note_raw(sfx,row)
- return value and (value>>12)&7 or nil
-end
-
-function bank_set_note_field(sfx,row,value,max_value,shift,keep)
+function bank_note_field(sfx,row,shift,mask,value)
  local addr=bank_note_addr(sfx,row)
- if not addr or not bank_int(value,0,max_value) then return false end
- return bank_write_word(addr,(peek2(addr)&keep)|(value<<shift))
-end
-
-function bank_set_note_pitch(sfx,row,value)
- return bank_set_note_field(sfx,row,value,63,0,0xffc0)
-end
-
-function bank_set_note_instrument(sfx,row,value)
- return bank_set_note_field(sfx,row,value,7,6,0xfe3f)
-end
-
-function bank_set_note_volume(sfx,row,value)
- return bank_set_note_field(sfx,row,value,7,9,0xf1ff)
-end
-
-function bank_set_note_effect(sfx,row,value)
- return bank_set_note_field(sfx,row,value,7,12,0x8fff)
-end
-
-function bank_set_note_custom(sfx,row,custom)
- local addr=bank_note_addr(sfx,row)
- if not addr or not bank_bool(custom) then return false end
- local value=peek2(addr)
- value=custom and (value|0x8000) or (value&0x7fff)
- return bank_write_word(addr,value)
+ if not addr then if value==nil then return nil end return false end
+ local raw=peek2(addr)
+ if value==nil then return (raw>>shift)&mask end
+ if not bank_int(value,0,mask) then return false end
+ return bank_write_word(addr,(raw&(0xffff^^(mask<<shift)))|(value<<shift))
 end
 
 function bank_sfx_meta_raw(sfx,index)
@@ -236,6 +190,21 @@ function bank_set_sfx_meta_raw(sfx,index,value)
  local addr=bank_sfx_addr(sfx,64+index)
  if not addr then return false end
  return bank_write_byte(addr,value)
+end
+
+function bank_sfx_filter(sfx,index)
+ local raw=bank_sfx_meta_raw(sfx,0)
+ local step=bank_filter_steps[index]
+ if not step or raw==nil or raw>0xd7 or bank_sfx_is_waveform(sfx) then return nil end
+ return flr(raw/step)%(index<3 and 2 or 3)
+end
+
+function bank_set_sfx_filter(sfx,index,value)
+ local old=bank_sfx_filter(sfx,index)
+ local step=bank_filter_steps[index]
+ if old==nil or not bank_int(value,0,index<3 and 1 or 2) then return false end
+ local raw=bank_sfx_meta_raw(sfx,0)
+ return bank_set_sfx_meta_raw(sfx,0,raw+(value-old)*step)
 end
 
 function bank_sfx_speed(sfx)

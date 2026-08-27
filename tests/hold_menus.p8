@@ -5,7 +5,7 @@ __lua__
 
 failures=0
 song_menu_items={"sfx","mute","flow","undo","play","follow"}
-sfx_menu_items={"preview","metadata","rest","undo","prev sfx","next sfx"}
+sfx_menu_items=split"preview,metadata,filters,rest,undo,prev sfx,next sfx"
 
 function check(ok,label)
  if ok then return end
@@ -18,8 +18,7 @@ function load_song() load_calls+=1 end
 function toggle_song() play_calls+=1 end
 function song_open_sfx() sfx_open_calls+=1 app_view="sfx" end
 function song_return_from_sfx() return_calls+=1 app_view="song" end
-function sfx_begin_row_edit() edit_calls+=1 end
-function sfx_begin_meta_edit() edit_calls+=1 end
+function sfx_begin_edit() edit_calls+=1 end
 function sfx_toggle_rest() rest_calls+=1 end
 
 function reset_fixture(view)
@@ -77,6 +76,8 @@ function _init()
  check(context_label("undo")=="undo -","other owner unavailable")
  undo_owner="sfx"
  check(context_label("undo")=="redo","sfx redo label")
+ context_apply("filters")
+ check(sfx_mode=="filters" and sfx_filter_field==1,"filter menu route")
  context_menu=nil
 
  -- The SFX chord remains one rest toggle and quick X returns to SONG.
@@ -89,6 +90,13 @@ function _init()
  update_action_buttons(false,true)
  update_action_buttons(false,false)
  check(return_calls==1 and app_view=="song","sfx x tap returns to song")
+
+ reset_fixture("sfx") sfx_mode="filters"
+ update_action_buttons(true,false) update_action_buttons(false,false)
+ check(edit_calls==1,"filter o tap edits")
+ reset_fixture("sfx") sfx_mode="filters"
+ update_action_buttons(false,true) update_action_buttons(false,false)
+ check(sfx_mode=="rows" and return_calls==0,"filter x tap returns to rows")
 
  if failures==0 then printh("pocket tracker hold menus: passed")
  else printh("pocket tracker hold menus: failed "..failures) end

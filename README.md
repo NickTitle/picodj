@@ -18,7 +18,8 @@ coverage; it is not included in the production cartridge.
   Left/Right stages a value, O commits, and X cancels without changing bytes.
 - In SFX, Up/Down scrolls all 32 rows and Left/Right selects pitch,
   instrument, built/custom mode, volume, or effect. O edits and tap X returns
-  to the same SONG position. Hold X opens rest, undo/redo, metadata, and SFX-slot
+  to the same SONG position. Hold X opens rest, undo/redo, metadata, named
+  conventional filters, and SFX-slot
   navigation. Metadata exposes all four raw bytes plus speed and loop/LEN.
   Waveform slots remain byte-exact, visibly read-only native data.
   Hold X also previews the selected row from row mode or the complete SFX from
@@ -82,6 +83,11 @@ bank boundary, `song_ui.lua` owns SONG, `sfx_ui.lua` owns the native SFX
 editor, and `tracker.lua` owns shared native six-button input and menus.
 `index.html` and `mobile.js` own the lossless browser file codecs and controls;
 they do not synthesize or edit authoritative audio.
+
+The SFX filter panel exposes NOIZ, BUZZ, and the two levels of DETUNE,
+REVERB, and DAMPEN. Its byte codec is derived from the checksummed native
+PICO-8 0.2.7 fixture documented in `docs/PICO8_027_FILTER_FIXTURE.md`;
+waveform slots and fixture-unsupported raw states remain visibly read-only.
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
 plus a calibrated 1,639-token probe. Its pass marker therefore gates the

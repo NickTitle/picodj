@@ -1,8 +1,8 @@
 -- native song/pattern screen
 
 song_expected_crc,song_rows=0x2a23,10
-song_menu_items={"sfx","mute","flow","undo","play","follow"}
-song_flow_names={"loop","back","stop","reserved"}
+song_menu_items=split"sfx,mute,flow,undo,play,follow"
+song_flow_names=split"loop,back,stop,reserved"
 
 native_music=music
 native_sfx=sfx
@@ -133,14 +133,6 @@ function song_move_channel(delta)
  song_channel=mid(0,song_channel+delta,bank_channel_count-1)
 end
 
-function open_song_screen()
- app_view="song"
- context_menu=nil
- action_gate=true reset_action_input()
- song_keep_visible()
- say("native song")
-end
-
 function song_restore_then(action)
  local restart=playing or (audition_active and audition_restart)
  local restart_pattern=playing and song_play_pattern or audition_restart_pattern
@@ -158,7 +150,8 @@ end
 function edit_begin(owner,addr,width,old,keep,shift,max_value,label)
  edit_owner=owner edit_addr=addr edit_width=width edit_old=old
  edit_keep=keep edit_shift=shift edit_max=max_value edit_label=label
- edit_value=(old>>shift)&max_value edit_dirty=bank_dirty
+ edit_value=shift<0 and flr(old/-shift)%(max_value+1) or (old>>shift)&max_value
+ edit_dirty=bank_dirty
  return true
 end
 
@@ -175,7 +168,7 @@ end
 
 function edit_commit()
  local owner=edit_owner
- local value=(edit_old&edit_keep)|(edit_value<<edit_shift)
+ local value=edit_shift<0 and edit_old+(edit_value-flr(edit_old/-edit_shift)%(edit_max+1))*-edit_shift or (edit_old&edit_keep)|(edit_value<<edit_shift)
  if value==edit_old then edit_cancel() return true end
  local ok=song_restore_then(function() return edit_write(edit_addr,edit_width,value) end)
  if ok then
@@ -209,10 +202,10 @@ function edit_update()
 end
 
 function draw_edit()
- rectfill(13,41,114,84,0) rect(13,41,114,84,11)
- print("edit "..edit_label,37,47,11)
- print("raw "..hex2(edit_old&0xff).." > "..hex2(edit_value),32,59,7)
- print("l/r value",45,69,6) print("o commit x cancel",31,78,5)
+ rectfill(13,44,114,78,0)
+ print("edit "..edit_label,32,49,11)
+ print("raw "..hex2(edit_old&0xff).." value "..hex2(edit_value),25,60,7)
+ print("l/r  o commit  x cancel",21,70,5)
 end
 
 function song_begin_edit(field)
@@ -233,6 +226,8 @@ function song_open_sfx()
  sfx_channel=song_channel
  sfx_number=bank_pattern_sfx(song_pattern,song_channel)
  app_view="sfx"
+ sfx_row,sfx_scroll,sfx_field=0,0,1
+ sfx_mode,sfx_error="rows",nil
  action_gate=true reset_action_input()
 end
 
@@ -280,7 +275,7 @@ function _update60()
  update_playhead()
  if notice_tick>0 then notice_tick-=1 end
  if app_view=="song" then update_song_screen()
- else update_sfx_handoff() end
+ else update_sfx_screen() end
 end
 
 function song_status()

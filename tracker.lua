@@ -1,7 +1,7 @@
 -- shared six-button input and menus for the native tracker
 
 hold_frames=18
-start_menu={"play","save","load"}
+start_menu=split"play,save,load"
 
 function say(text)
  notice=text
@@ -45,6 +45,7 @@ function context_apply(name)
  else
   if name=="preview" then toggle_audition(sfx_mode=="rows" and sfx_row or nil)
   elseif name=="metadata" then sfx_mode="meta" sfx_meta_field=1
+  elseif name=="filters" then sfx_mode="filters" sfx_filter_field=1
   elseif name=="rest" then sfx_toggle_rest()
   elseif name=="undo" then sfx_undo()
   else sfx_change_slot(name=="prev sfx" and -1 or 1) end
@@ -88,14 +89,13 @@ function update_action_buttons(o_down,x_down)
  if not o_down and o_was_down then
   if not o_consumed then
    if view=="song" then song_open_sfx()
-   elseif sfx_mode=="meta" then sfx_begin_meta_edit()
-   else sfx_begin_row_edit() end
+   else sfx_begin_edit() end
   end
   o_hold,o_consumed=0,false
  end
  if not x_down and x_was_down then
   if not x_consumed and view=="sfx" then
-   if sfx_mode=="meta" then sfx_mode="rows" else song_return_from_sfx() end
+   if sfx_mode!="rows" then sfx_mode="rows" else song_return_from_sfx() end
   end
   x_hold,x_consumed=0,false
  end
@@ -124,14 +124,10 @@ end
 
 function draw_context_menu()
  local items=context_items()
- rectfill(9,13,118,105,0) rect(9,13,118,105,12)
- local title=context_menu=="start" and "project" or context_menu.." context"
- print(title,64-#title*2,18,12)
+ rectfill(9,13,118,105,0)
+ print(context_menu=="start" and "project" or context_menu,16,18,12)
  for i=1,#items do
-  local y=27+(i-1)*9
-  local label=context_label(items[i])
-  if i==context_item then rectfill(14,y-2,113,y+6,5) print(">",17,y,7) end
-  print(label,25,y,i==context_item and 7 or 6)
+  local picked=i==context_item
+  print((picked and "> " or "  ")..context_label(items[i]),16,19+i*10,picked and 7 or 6)
  end
- print("o choose  x back",35,96,5)
 end

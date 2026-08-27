@@ -101,7 +101,7 @@ function _init()
  check(bank_profile_apply(),"profile second apply")
  check_profile_words("profile idempotent")
  local active_revision=bank_revision
- check(not bank_set_note_volume(1,0,1) and
+ check(not bank_note_field(1,0,9,7,1) and
        not bank_set_pattern_sfx(0,0,2) and
        not bank_copy(bank_stage_base,bank_audio_base),
        "profile blocks authored writes and copies")
@@ -152,37 +152,37 @@ function _init()
        not bank_set_pattern_flag(62,3,true),"reserved song bit rejected")
 
  -- Note fields own disjoint masks, including the custom-instrument bit.
- check(bank_note_pitch(0,0)==0x18,"first note pitch")
+ check(bank_note_field(0,0,0,63)==0x18,"first note pitch")
  local before=bank_note_raw(63,31)
- check(bank_set_note_pitch(63,31,17),"set pitch")
+ check(bank_note_field(63,31,0,63,17),"set pitch")
  local after=bank_note_raw(63,31)
  check_owned(before,after,0x003f,"pitch preserves unrelated bits")
- check(bank_note_pitch(63,31)==17,"pitch getter")
+ check(bank_note_field(63,31,0,63)==17,"pitch getter")
 
  before=after
- check(bank_set_note_instrument(63,31,6),"set instrument")
+ check(bank_note_field(63,31,6,7,6),"set instrument")
  after=bank_note_raw(63,31)
  check_owned(before,after,0x01c0,"instrument preserves unrelated bits")
- check(bank_note_instrument(63,31)==6,"instrument getter")
+ check(bank_note_field(63,31,6,7)==6,"instrument getter")
 
  before=after
- check(bank_set_note_volume(63,31,7),"set volume")
+ check(bank_note_field(63,31,9,7,7),"set volume")
  after=bank_note_raw(63,31)
  check_owned(before,after,0x0e00,"volume preserves unrelated bits")
- check(bank_note_volume(63,31)==7,"volume getter")
+ check(bank_note_field(63,31,9,7)==7,"volume getter")
 
  before=after
- check(bank_set_note_effect(63,31,3),"set effect")
+ check(bank_note_field(63,31,12,7,3),"set effect")
  after=bank_note_raw(63,31)
  check_owned(before,after,0x7000,"effect preserves unrelated bits")
- check(bank_note_effect(63,31)==3,"effect getter")
+ check(bank_note_field(63,31,12,7)==3,"effect getter")
 
  before=after
- check(bank_set_note_custom(63,31,true),"set custom instrument")
+ check(bank_note_field(63,31,15,1,1),"set custom instrument")
  after=bank_note_raw(63,31)
  check_owned(before,after,0x8000,"custom preserves unrelated bits")
- check(bank_note_custom(63,31),"custom getter")
- check(bank_set_note_custom(63,31,false) and not bank_note_custom(63,31),
+ check(bank_note_field(63,31,15,1)==1,"custom getter")
+ check(bank_note_field(63,31,15,1,0) and bank_note_field(63,31,15,1)==0,
        "custom clear")
 
  check(bank_set_sfx_meta_raw(63,3,0xa5),"set last raw metadata")
@@ -215,11 +215,11 @@ function _init()
  check(not bank_set_pattern_sfx(64,0,0) and
        not bank_set_pattern_sfx(0,0,64) and
        not bank_set_pattern_muted(0,0,1),"song setter rejection")
- check(not bank_set_note_pitch(63,31,64) and
-       not bank_set_note_instrument(63,31,8) and
-       not bank_set_note_volume(63,31,8) and
-       not bank_set_note_effect(63,31,8) and
-       not bank_set_note_custom(63,31,1),"note setter rejection")
+ check(not bank_note_field(63,31,0,63,64) and
+       not bank_note_field(63,31,6,7,8) and
+       not bank_note_field(63,31,9,7,8) and
+       not bank_note_field(63,31,12,7,8) and
+       not bank_note_field(63,31,15,1,2),"note setter rejection")
  check(not bank_set_sfx_speed(63,0) and
        not bank_set_sfx_loop_start(63,32) and
        not bank_set_sfx_loop_end(63,32),"semantic metadata rejection")
@@ -258,8 +258,8 @@ function _init()
  check((bank_sfx_meta_raw(0,2)&0x80)!=0,"waveform metadata preserved")
  local wave_revision=bank_revision
  local live_wave_crc=bank_checksum(bank_audio_base)
- check(bank_note_addr(0,0)==nil and bank_note_pitch(0,0)==nil and
-       not bank_set_note_pitch(0,0,1),"waveform typed access rejected")
+ check(bank_note_addr(0,0)==nil and bank_note_field(0,0,0,63)==nil and
+       not bank_note_field(0,0,0,63,1),"waveform typed access rejected")
  check_checksum(bank_audio_base,live_wave_crc,
                 "waveform rejection preserves bank")
  check(bank_revision==wave_revision,"waveform rejection preserves revision")
