@@ -30,10 +30,21 @@ function _init()
  ck(not sfx_begin_edit() and sfx_error!=nil,"wave meta reject")
  sfx_error=nil sfx_mode="filters" sfx_filter_field=1
  ck(not sfx_begin_edit() and sfx_error!=nil,"wave filter reject")
+ sfx_error=nil
+ ck(not sfx_rows_begin(1) and not sfx_rows_begin(3),"wave row ops reject")
  for i=0,67 do
   ck(peek(bank_sfx_addr(0,i))==bytes[i+1],"wave byte "..i)
  end
  ck(not bank_dirty and bank_revision==0,"wave bytes exact clean")
+ setup(63)
+ sfx_clip_count=0
+ ck(not sfx_rows_begin(2) and sfx_error=="clipboard empty","empty paste reject")
+ ck(not bank_dirty and bank_revision==0 and undo_owner==nil,"empty paste exact")
+ setup(63)
+ ck(sfx_rows_begin(1),"range begin")
+ for i=1,hold_frames do update_action_buttons(false,true) end
+ ck(not sfx_row_op and not context_menu,"hold x cancels range")
+ update_action_buttons(false,false)
  setup(63)
  for i=1,hold_frames do update_action_buttons(false,true) end
  ck(context_menu=="sfx" and context_gate,"hold x menu")
@@ -49,7 +60,7 @@ function _init()
  setup(63)
  poke2(bank_note_addr(63,0),0xd6a5) bank_project_init()
  update_action_buttons(true,true) update_action_buttons(false,false)
- ck(bank_note_raw(63,0)==0 and not context_menu,
+ ck(peek2(bank_note_addr(63,0))==0 and not context_menu,
   "o+x rest without menu collision")
  if fails==0 then printh("pocket tracker sfx safety: passed")
  else printh("pocket tracker sfx safety: failed "..fails) end

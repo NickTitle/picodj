@@ -5,7 +5,8 @@ sfx_fields=split"pitch,inst,custom,volume,effect"
 sfx_field_x="\16\32\40\48\56"
 sfx_field_shift="\0\6\15\9\12"
 sfx_field_mask="\63\7\1\7\7"
-sfx_menu_items=split"preview,metadata,filters,rest,undo,prev sfx,next sfx"
+sfx_menu_items=split"preview,metadata,filters,row ops,undo,prev sfx,next sfx"
+sfx_row_menu=split"rest,copy rows,paste rows,clear rows"
 sfx_meta_fields=split"speed,start/len,end"
 sfx_filter_names=split"noiz,buzz,detune,reverb,dampen"
 sfx_rest_words={}
@@ -25,6 +26,7 @@ function sfx_raw_word()
 end
 
 function sfx_begin_edit()
+ if sfx_row_op then return sfx_rows_apply() end
  if sfx_is_waveform() then
   sfx_error="waveform "..(sfx_mode=="rows" and "slot" or sfx_mode).." read only"
   return false
@@ -56,16 +58,48 @@ function sfx_toggle_rest()
   old=peek2(addr)
   new=old==0 and (sfx_rest_words[addr] or 0x0a18) or 0
   if old!=0 then sfx_rest_words[addr]=old end
-  return bank_write_word(addr,new)
+  memcpy(bank_batch_base,addr,2)
+  return bank_write(addr,2,new)
  end)
  if ok and old!=new then
-  undo_owner="sfx" undo_width=2 undo_addr=addr undo_value=old undo_dirty=old_dirty
+  undo_owner="sfx" undo_width=2 undo_addr=addr undo_dirty=old_dirty
   sfx_error=nil
  end
  return ok
 end
 
-function sfx_undo() return edit_undo("sfx") end
+function sfx_rows_begin(op)
+ if sfx_is_waveform() then sfx_error="waveform slot read only" return false end
+ if op==2 and sfx_clip_count==0 then sfx_error="clipboard empty" return false end
+ sfx_row_op,sfx_anchor=op,sfx_row
+ sfx_error=nil
+ return true
+end
+
+function sfx_rows_apply()
+ if audition_active then stop_audition(true) end
+ local first,last=min(sfx_anchor,sfx_row),max(sfx_anchor,sfx_row)
+ local count=abs(sfx_row-sfx_anchor)+1
+ if sfx_row_op==2 then first=sfx_row count=sfx_clip_count end
+ if sfx_row_op==1 then
+  if bank_rows(sfx_number,first,count) then sfx_clip_count=count sfx_error=nil
+  else sfx_error="copy rejected" return false end
+ else
+  local source=sfx_row_op==2 and bank_clip_base or nil
+  local same=bank_rows(sfx_number,first,count,source,false)
+  if same==nil then sfx_error=sfx_row_op==2 and "paste overflow" or "range rejected" return false end
+  if not same then
+   local dirty=bank_dirty
+   local ok=song_restore_then(function() return bank_rows(sfx_number,first,count,source,true) end)
+   if not ok then sfx_error="batch rejected" return false end
+   undo_owner,undo_width,undo_dirty="sfx",count*2,dirty
+   undo_addr=bank_note_addr(sfx_number,first)
+  end
+  sfx_error=nil
+ end
+ sfx_row_op=nil
+ return true
+end
 
 function sfx_change_slot(delta)
  if audition_active then stop_audition(true) end
@@ -92,8 +126,8 @@ function update_sfx_screen()
   if btnp(2) then sfx_filter_field=mid(1,sfx_filter_field-1,5)
   elseif btnp(3) then sfx_filter_field=mid(1,sfx_filter_field+1,5) end
  else
-  if btnp(0) then sfx_field=mid(1,sfx_field-1,#sfx_fields)
-  elseif btnp(1) then sfx_field=mid(1,sfx_field+1,#sfx_fields)
+  if not sfx_row_op and btnp(0) then sfx_field=mid(1,sfx_field-1,#sfx_fields)
+  elseif not sfx_row_op and btnp(1) then sfx_field=mid(1,sfx_field+1,#sfx_fields)
   elseif btnp(2) then sfx_row=mid(0,sfx_row-1,31) sfx_keep_visible()
   elseif btnp(3) then sfx_row=mid(0,sfx_row+1,31) sfx_keep_visible() end
  end
@@ -117,11 +151,16 @@ function draw_sfx_filters()
 end
 
 function draw_sfx_rows()
+ local first,last=sfx_row,sfx_row
+ if sfx_row_op then
+  first,last=min(sfx_anchor,sfx_row),max(sfx_anchor,sfx_row)
+  if sfx_row_op==2 then first,last=sfx_row,sfx_row+sfx_clip_count-1 end
+ end
  print("row p  i c v e",4,12,5)
  for line=0,sfx_rows-1 do
   local row=sfx_scroll+line
   local y=21+line*8
-  if row==sfx_row then rectfill(1,y-1,126,y+6,1) end
+  if row>=first and row<=last then rectfill(1,y-1,126,y+6,1) end
   local word=bank_note_authored_raw(sfx_number,row)
   if word==nil then
    print(hex2(row).." waveform data",4,y,row==sfx_row and 8 or 6)
@@ -136,8 +175,13 @@ function draw_sfx_rows()
    end
   end
  end
- print("field "..sfx_fields[sfx_field].."  hold x menu",3,96,5)
- print("tap o edit/hold start x song",7,105,6)
+ if sfx_row_op then
+  print(sfx_row_menu[sfx_row_op+1].." "..hex2(first).."-"..hex2(last),18,96,7)
+  print("up/down  o confirm  x cancel",6,105,6)
+ else
+  print("field "..sfx_fields[sfx_field].."  hold x menu",3,96,5)
+  print("tap o edit/hold start x song",7,105,6)
+ end
 end
 
 function draw_sfx_meta()

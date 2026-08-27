@@ -10,6 +10,12 @@ restore_calls=0
 function say() end
 function song_restore_then(action) restore_calls+=1 return action() end
 function ck(ok,label) if not ok then fails+=1 printh("fail: "..label) end end
+function set_filter(s,f,v)
+ local old=bank_sfx_filter(s,f)
+ if old==nil or not bank_int(v,0,f<3 and 1 or 2) then return false end
+ local addr=bank_sfx_addr(s,64)
+ return bank_write(addr,1,peek(addr)+(v-old)*bank_filter_steps[f])
+end
 function setup(slot)
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
  bank_project_init() playing=false audition_active=false
@@ -34,7 +40,7 @@ function _init()
     ck(bank_sfx_filter(63,field)==values[field],"decode "..raw..":"..field)
     for value=0,limits[field] do
      poke(bank_sfx_addr(63,64),raw) bank_project_init()
-     ck(bank_set_sfx_filter(63,field,value),"set "..raw..":"..field..":"..value)
+     ck(set_filter(63,field,value),"set "..raw..":"..field..":"..value)
      ck(bank_sfx_meta_raw(63,0)==raw+(value-values[field])*bank_filter_steps[field],"exact set")
     end
    end
@@ -45,13 +51,13 @@ function _init()
  for raw=0xd8,0xff do
   poke(bank_sfx_addr(63,64),raw) bank_project_init()
   for field=1,5 do
-   ck(bank_sfx_filter(63,field)==nil and not bank_set_sfx_filter(63,field,0),"raw reject "..raw..":"..field)
+   ck(bank_sfx_filter(63,field)==nil and not set_filter(63,field,0),"raw reject "..raw..":"..field)
   end
   ck(peek(bank_sfx_addr(63,64))==raw and not bank_dirty and bank_revision==0,"raw exact "..raw)
  end
  setup(0) poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80) bank_project_init()
  local wave=bank_sfx_meta_raw(0,0)
- ck(bank_sfx_filter(0,1)==nil and not bank_set_sfx_filter(0,1,1),"wave reject")
+ ck(bank_sfx_filter(0,1)==nil and not set_filter(0,1,1),"wave reject")
  ck(bank_sfx_meta_raw(0,0)==wave and not bank_dirty and bank_revision==0,"wave exact")
 
  -- Staged commit, cancel, no-op, whole-byte Undo/Redo, and restore policy.
@@ -59,8 +65,8 @@ function _init()
  sfx_filter_field=5 ck(sfx_begin_edit(),"begin") edit_value=0
  ck(edit_commit() and bank_sfx_meta_raw(63,0)==0x47 and restore_calls==1,"commit")
  local rev=bank_revision
- ck(sfx_undo() and bank_sfx_meta_raw(63,0)==0xd7 and bank_revision==rev+1,"undo")
- rev=bank_revision ck(sfx_undo() and bank_sfx_meta_raw(63,0)==0x47 and bank_revision==rev+1,"redo")
+ ck(edit_undo("sfx") and bank_sfx_meta_raw(63,0)==0xd7 and bank_revision==rev+1,"undo")
+ rev=bank_revision ck(edit_undo("sfx") and bank_sfx_meta_raw(63,0)==0x47 and bank_revision==rev+1,"redo")
  sfx_filter_field=3 ck(sfx_begin_edit(),"cancel begin") edit_value=2 edit_cancel()
  ck(bank_sfx_meta_raw(63,0)==0x47 and undo_width>0,"cancel preserves")
  local owner=undo_owner rev=bank_revision

@@ -11,7 +11,8 @@ end
 
 function context_items()
  return context_menu=="start" and start_menu or
-  (context_menu=="song" and song_menu_items or sfx_menu_items)
+  (context_menu=="song" and song_menu_items or
+  (context_menu=="row ops" and sfx_row_menu or sfx_menu_items))
 end
 
 function open_context_menu(kind)
@@ -37,13 +38,15 @@ function context_apply(name)
   elseif name=="play" then toggle_song()
   else play_follow=not play_follow end
  else
-  if name=="preview" then
+  if context_menu=="row ops" then
+   if name=="rest" then sfx_toggle_rest() else sfx_rows_begin(context_item-1) end
+  elseif name=="row ops" then open_context_menu(name) return
+  elseif name=="preview" then
    if audition_active then stop_audition(true)
    else start_audition(sfx_mode=="rows" and sfx_row or nil) end
   elseif name=="metadata" then sfx_mode="meta" sfx_meta_field=1
   elseif name=="filters" then sfx_mode="filters" sfx_filter_field=1
-  elseif name=="rest" then sfx_toggle_rest()
-  elseif name=="undo" then sfx_undo()
+  elseif name=="undo" then edit_undo("sfx")
   else sfx_change_slot(name=="prev sfx" and -1 or 1) end
  end
  close_context_menu()
@@ -82,7 +85,8 @@ function update_action_buttons(o_down,x_down)
   if x_hold>=0 then x_hold+=1 end
   if x_hold>=hold_frames then
    x_hold=-1
-   open_context_menu(view)
+   if view=="sfx" and sfx_row_op then sfx_row_op=nil
+   else open_context_menu(view) end
   end
  end
  if not o_down and o_hold!=0 then
@@ -94,7 +98,8 @@ function update_action_buttons(o_down,x_down)
  end
  if not x_down and x_hold!=0 then
   if x_hold>0 and view=="sfx" then
-   if sfx_mode!="rows" then sfx_mode="rows" else song_return_from_sfx() end
+   if sfx_row_op then sfx_row_op=nil
+   elseif sfx_mode!="rows" then sfx_mode="rows" else song_return_from_sfx() end
   end
   x_hold=0
  end
