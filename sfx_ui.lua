@@ -18,24 +18,25 @@ end
 function sfx_begin_edit()
  if sfx_row_op then return sfx_rows_apply() end
  local wave=sfx_is_waveform()
+ sfx_wave_edit=wave
  if sfx_mode!="rows" then
   local filter=sfx_mode=="filters"
-  local index=filter and sfx_filter_field or sfx_meta_field
+  local index=filter and sfx_filter_field+(wave and 2 or 0) or sfx_meta_field
   local mode=not filter and sfx_number<8 and index>(wave and 1 or 3)
   if index>3 and not (filter or mode) then sfx_error="mode unavailable" return false end
   local meta=filter and 0 or mode and 2 or index
   local old=bank_sfx_meta_raw(sfx_number,meta)
-  if filter and (wave or old>0xd7) then
-   sfx_error=wave and "waveform filters read only" or "raw filter state read only" return false
+  if filter and (not bank_filter_steps[index] or old>0xd7) then
+   sfx_error=old>0xd7 and "raw filter state read only" or "filter unavailable" return false
   end
   local keep,shift,max=0,0,31
-  if filter then shift=-bank_filter_steps[index] max=index<3 and 1 or 2
+  if filter then shift=-bank_filter_steps[index] max=1+index\3
   elseif mode or wave then
    keep,shift,max=mode and 0x7f or 0xfe,mode and 7 or 0,1
   elseif index==1 then max=255 else keep=0xe0 end
   return edit_begin("sfx",bank_sfx_addr(sfx_number,64+meta),1,old,
-   keep,shift,max,mode and "mode" or wave and "bass" or
-   (filter and sfx_filter_names or sfx_meta_fields)[index])
+   keep,shift,max,mode and "mode" or filter and sfx_filter_names[index] or
+   wave and "bass" or sfx_meta_fields[index])
  end
  if wave then
   local addr=bank_sfx_addr(sfx_number,sfx_row*2+sfx_field-1)
@@ -97,7 +98,7 @@ end
 
 function update_sfx_screen()
  if edit_owner=="sfx" then
-  if edit_label=="bass" and not sfx_is_waveform() then
+  if sfx_wave_edit and not sfx_is_waveform() then
    edit_cancel() sfx_error="waveform unavailable"
   else edit_update() end
   return
@@ -112,10 +113,10 @@ function update_sfx_screen()
  if update_action_buttons(btn(4),btn(5)) then return end
 
  if sfx_mode!="rows" then
-  local meta=sfx_mode=="meta"
+  local meta,wave=sfx_mode=="meta",sfx_is_waveform()
   local field=meta and sfx_meta_field or sfx_filter_field
   field=mid(1,field+(btnp(3) and 1 or btnp(2) and -1 or 0),
-   meta and (sfx_number<8 and (sfx_is_waveform() and 2 or 4) or 3) or 5)
+   meta and (sfx_number<8 and (wave and 2 or 4) or 3) or wave and 3 or 5)
   if meta then sfx_meta_field=field else sfx_filter_field=field end
  else
   local fields=sfx_is_waveform() and 2 or 5
@@ -138,11 +139,13 @@ end
 
 function draw_sfx_filters()
  local raw,values=bank_sfx_meta_raw(sfx_number,0),{}
- for i=1,5 do add(values,bank_sfx_filter(sfx_number,i) or "-") end
+ local wave=sfx_is_waveform()
+ local names=wave and split"detune,reverb,dampen" or sfx_filter_names
+ sfx_filter_field=min(#names,sfx_filter_field)
+ for i=1,#names do add(values,bank_sfx_filter(sfx_number,i+(wave and 2 or 0)) or "-") end
  print("raw filter "..hex2(raw),30,18,5)
- draw_sfx_list(sfx_filter_names,values,sfx_filter_field,32,12)
- print(sfx_is_waveform() and "waveform filters read only" or
-  raw>0xd7 and "raw filter state read only" or "",11,96,8)
+ draw_sfx_list(names,values,sfx_filter_field,32,12)
+ print(raw>0xd7 and "raw filter state read only" or "",11,96,8)
 end
 
 function draw_sfx_rows()

@@ -85,13 +85,15 @@ assert.equal(io.storeLastKnownGood(envelope), true);
 assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope));
 const modeEnvelope = envelope.slice();
 const modeOffset = 64 + 0x100 + 68 + 66;
+const filterOffset = 64 + 0x100 + 68 + 64;
 modeEnvelope[modeOffset] ^= 0x80;
+modeEnvelope[filterOffset] = 0xd0;
 put16(modeEnvelope, 8, io.crc16(modeEnvelope, 64));
 put16(modeEnvelope, 10, 0);
 put16(modeEnvelope, 10, io.crc16(modeEnvelope, 0, modeEnvelope.length, 10, 12));
 assert.equal(io.storeLastKnownGood(modeEnvelope), true);
 assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(modeEnvelope),
-  'browser slot preserves the selected waveform mode bit and all other bytes');
+  'browser slot preserves selected waveform mode and filter bytes with all other bytes');
 assert.equal(io.storeLastKnownGood(envelope), true);
 
 const corruptRecord = JSON.parse(localStorage.getItem(io.key));

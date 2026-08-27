@@ -35,8 +35,13 @@ function _init()
  sfx_meta_field=2
  ck(sfx_begin_edit() and edit_label=="mode" and edit_value==1,"wave mode allowed")
  edit_cancel()
- sfx_error=nil sfx_mode="filters" sfx_filter_field=1
- ck(not sfx_begin_edit() and sfx_error!=nil,"wave filter reject")
+ sfx_error=nil sfx_mode="filters" sfx_filter_field=4
+ ck(not sfx_begin_edit() and sfx_error=="filter unavailable","wave invalid reject")
+ sfx_filter_field=1 sfx_error=nil
+ ck(sfx_begin_edit() and edit_label=="detune","wave filter allowed")
+ edit_cancel()
+ sfx_filter_field=4 draw_sfx_filters()
+ ck(sfx_filter_field==3,"wave filter focus clamps")
  sfx_error=nil
  ck(not sfx_rows_begin(1) and not sfx_rows_begin(3),"wave row ops reject")
  for i=0,67 do

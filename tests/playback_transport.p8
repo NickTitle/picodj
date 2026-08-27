@@ -28,8 +28,10 @@ function _init()
  song_channel=2 song_scroll=0 app_view="song" sfx_number=1 sfx_row=0
  play_follow=true transport_tick=0 song_error=nil sfx_error=nil
  song_mix,song_mix_channel,song_mix_stage,song_active=0,0,0,"a----"
+ poke(bank_sfx_addr(0,64),0)
  poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
  poke(bank_sfx_addr(0,0),0x7f)
+ memcpy(bank_sfx_addr(7,0),bank_sfx_addr(0,0),bank_sfx_size)
  local authored=snap(bank_sfx_addr(1,0),bank_sfx_size*4)
  local scratch=snap(bank_sfx_addr(63,0),bank_sfx_size)
  ck(start_song(0) and start_song(0),"idempotent play")
@@ -75,6 +77,15 @@ function _init()
  ck(#music_calls==calls+2 and peek(bass_addr)==(bass^^1) and
   (peek(bass_addr)&0xfe)==(bass&0xfe) and bank_revision==revision+1 and
   playing and bank_profile_is_active(),"bass stop restore edit restart once")
+ for slot in all({0,7}) do
+  local wave_filter=bank_sfx_addr(slot,64) local filter_old=peek(wave_filter)
+  calls=#music_calls revision=bank_revision
+  ck(song_restore_then(function() return bank_write(wave_filter,1,filter_old+8) end),
+   "active waveform filter edit "..slot)
+  ck(#music_calls==calls+2 and bank_sfx_filter(slot,3)==1 and
+   bank_revision==revision+1 and playing and bank_profile_is_active(),
+   "waveform filter restart exact "..slot)
+ end
  poke2(bank_clip_base,0x1234) sfx_clip_count=1
  calls=#music_calls revision=bank_revision
  ck(not bank_rows(1,0,1,bank_clip_base,false),"batch preflight differs")
@@ -135,6 +146,16 @@ function _init()
  ck(#music_calls==calls+2 and peek(wave_bass)==(bass_old^^1) and
   bank_revision==revision+1 and bank_profile_is_active(),
   "profile waveform bass restart exact")
+ for slot in all({1,4}) do
+  local wave_filter=bank_sfx_addr(slot,64) local filter_old=peek(wave_filter)
+  calls=#music_calls revision=bank_revision
+  ck(song_restore_then(function() return bank_write(wave_filter,1,filter_old+24) end),
+   "profile waveform filter edit "..slot)
+  wave[0x100+slot*68+65]=filter_old+24
+  ck(#music_calls==calls+2 and bank_sfx_filter(slot,4)==1 and
+   bank_revision==revision+1 and bank_profile_is_active(),
+   "profile waveform filter restart exact "..slot)
+ end
  local wave_mode=bank_sfx_addr(4,66) local mode_old=peek(wave_mode)
  calls=#music_calls revision=bank_revision
  ck(song_restore_then(function() return bank_write(wave_mode,1,mode_old&0x7f) end),

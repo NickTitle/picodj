@@ -99,6 +99,7 @@ function _init()
  check(context_label("undo")=="undo -","other owner unavailable")
  undo_owner="sfx"
  check(context_label("undo")=="redo","sfx redo label")
+ sfx_filter_field=5
  context_apply("filters")
  check(sfx_mode=="filters" and sfx_filter_field==1,"filter menu route")
  context_menu="sfx" context_apply("metadata")

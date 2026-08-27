@@ -74,9 +74,12 @@ selected SONG pattern/channel and SFX number on return.
   SFX 0–7 also expose the native notes/wave toggle as a masked edit of metadata
   byte 66 bit 7. It reinterprets the same 64 bytes without conversion; Undo/Redo
   and active playback use the shared authored/profile-safe transaction.
+  The waveform Filters panel exposes fixture-proven DETUNE, REVERB, and DAMPEN
+  levels only. Each edit owns its `8/24/72` mixed-radix digit in metadata byte
+  64; waveform NOIZ/BUZZ and unsupported raw states remain read-only.
   Track-1 playback and materialized export snapshot profile-range waveforms but
   skip their volume transform, preserving every sample and metadata byte.
-- **Revisit:** other waveform metadata/filter semantics, range
+- **Revisit:** other waveform metadata semantics, waveform NOIZ/BUZZ, range
   copy/paste/clear, and direct preview require separate ownership and audition
   designs; never reinterpret sample bytes as packed note words.
 
