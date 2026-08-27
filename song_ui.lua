@@ -102,7 +102,7 @@ function update_playhead()
   local row=native_stat(50+channel)
   song_active..=current>=0 and channel+1 or "-"
   if channel==song_channel then play_step=mid(0,row,31)+1 end
-  if play_follow and app_view=="sfx" and current==sfx_number then
+  if play_follow and app_view=="sfx" and not sfx_row_op and current==sfx_number then
    sfx_row=mid(0,row,bank_row_count-1)
    sfx_keep_visible()
   end
@@ -120,15 +120,6 @@ end
 function song_keep_visible()
  song_scroll=mid(song_pattern-song_rows+1,song_scroll,song_pattern)
  song_scroll=mid(0,song_scroll,bank_pattern_count-song_rows)
-end
-
-function song_move_pattern(delta)
- song_pattern=mid(0,song_pattern+delta,bank_pattern_count-1)
- song_keep_visible()
-end
-
-function song_move_channel(delta)
- song_channel=mid(0,song_channel+delta,bank_channel_count-1)
 end
 
 function song_restore_then(action)
@@ -158,19 +149,17 @@ function edit_cancel()
  action_gate=true reset_action_input()
 end
 
-function edit_write(addr,width,value)
- if width==1 then return bank_write_byte(addr,value) end
- return bank_write_word(addr,value)
-end
-
 function edit_commit()
  local owner=edit_owner
  local value=edit_shift<0 and edit_old+(edit_value-flr(edit_old/-edit_shift)%(edit_max+1))*-edit_shift or (edit_old&edit_keep)|(edit_value<<edit_shift)
  if value==edit_old then edit_cancel() return true end
- local ok=song_restore_then(function() return edit_write(edit_addr,edit_width,value) end)
+ local ok=song_restore_then(function()
+  memcpy(bank_batch_base,edit_addr,edit_width)
+  return bank_write(edit_addr,edit_width,value)
+ end)
  if ok then
   undo_owner=owner undo_addr=edit_addr undo_width=edit_width
-  undo_value=edit_old undo_dirty=edit_dirty edit_error(owner,nil)
+  undo_dirty=edit_dirty edit_error(owner,nil)
  else edit_error(owner,"edit rejected") end
  edit_cancel()
  return ok
@@ -178,14 +167,10 @@ end
 
 function edit_undo(owner)
  if undo_owner!=owner then edit_error(owner,"nothing to undo") return false end
- local width=abs(undo_width)
- local value,dirty=nil,bank_dirty
- local ok=song_restore_then(function()
-  value=width==1 and peek(undo_addr) or peek2(undo_addr)
-  return edit_write(undo_addr,width,undo_value)
- end)
+ local dirty=bank_dirty
+ local ok=song_restore_then(function() return bank_swap(undo_addr,abs(undo_width)) end)
  if ok then
-  undo_value=value bank_dirty=undo_dirty undo_dirty=dirty undo_width=-undo_width
+  bank_dirty=undo_dirty undo_dirty=dirty undo_width=-undo_width
   edit_error(owner,nil)
  else edit_error(owner,"undo rejected") end
  return ok
@@ -219,7 +204,7 @@ end
 function song_open_sfx()
  sfx_pattern=song_pattern
  sfx_channel=song_channel
- sfx_number=bank_pattern_sfx(song_pattern,song_channel)
+ sfx_number=peek(bank_song_addr(song_pattern,song_channel))&0x3f
  app_view="sfx"
  sfx_row,sfx_scroll,sfx_field=0,0,1
  sfx_mode,sfx_error="rows",nil
@@ -242,10 +227,10 @@ function update_song_screen()
 
  if update_action_buttons(btn(4),btn(5)) then return end
 
- if btnp(0) then song_move_channel(-1)
- elseif btnp(1) then song_move_channel(1)
- elseif btnp(2) then song_move_pattern(-1)
- elseif btnp(3) then song_move_pattern(1)
+ if btnp(0) then song_channel=mid(0,song_channel-1,bank_channel_count-1)
+ elseif btnp(1) then song_channel=mid(0,song_channel+1,bank_channel_count-1)
+ elseif btnp(2) then song_pattern=mid(0,song_pattern-1,bank_pattern_count-1) song_keep_visible()
+ elseif btnp(3) then song_pattern=mid(0,song_pattern+1,bank_pattern_count-1) song_keep_visible()
  elseif btnp(4) then song_open_sfx() end
 end
 
@@ -257,6 +242,7 @@ function _init()
  playing,play_step=false,1
  song_pattern,song_channel,song_scroll=0,0,0
  edit_owner,undo_owner,song_error=nil,nil,nil
+ sfx_clip_count=0
  audition_active,audition_restart=false,false
  transport_tick=0
  play_follow=true
@@ -281,11 +267,6 @@ function song_status()
  return text
 end
 
-function flow_glyph(pattern,channel)
- return (channel==3 or bank_pattern_flag(pattern,channel)) and
-  sub("lbsr",channel+1,channel+1) or "-"
-end
-
 function draw_song_screen()
  cls(0)
  rectfill(0,0,127,8,1)
@@ -300,9 +281,10 @@ function draw_song_screen()
   print(hex2(pattern),2,y,pattern==song_pattern and 7 or 6)
   for ch=0,3 do
    local x=25+ch*24
+   local raw=peek(bank_song_addr(pattern,ch))
    if pattern==song_pattern and ch==song_channel then rect(x-2,y-2,x+19,y+6,10) end
-   print(hex2(bank_pattern_sfx(pattern,ch))..
-    (bank_pattern_muted(pattern,ch) and "m" or "-")..flow_glyph(pattern,ch),x,y,ch+8)
+   print(hex2(raw&0x3f)..((raw&0x40)!=0 and "m" or "-")..
+    ((ch==3 or (raw&0x80)!=0) and sub("lbsr",ch+1,ch+1) or "-"),x,y,ch+8)
   end
  end
  print("dpad move o sfx hold x menu",4,101,5)

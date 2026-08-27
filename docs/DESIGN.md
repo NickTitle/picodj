@@ -147,15 +147,20 @@ path and keeps browser code out of arbitrary cartridge RAM.
 
 ## 5. Editing transactions
 
-1. An input action resolves to one typed command such as `set_note_pitch`.
-2. The command records the smallest useful undo record (address, old bytes,
-   new bytes) or takes a bank snapshot for bulk operations.
+1. An input action resolves to a validated byte-span or bit-field command.
+2. The command records its address, width, prior dirty state, and exact
+   pre-image in the fixed batch-swap buffer.
 3. The accessor validates indices and values before writing.
 4. The write touches only owned bits, marks the project dirty, and increments
    the in-memory revision.
-5. If the edited bytes are currently playing, the transport either applies
-   them live or restarts at a documented boundary. The policy must not vary
-   silently by screen.
+5. If the edited bytes are currently playing, the transport stops and restores
+   temporary audio, applies the transaction once, then restarts the observed
+   pattern under the current audition-mix/profile policy.
+
+The global one-level history swaps the complete recorded span, so scalar edits,
+row rest toggles, and 1–32-row paste/clear operations share the same atomic
+Undo/Redo path. A no-op, rejected range, copy, or cancelled selection does not
+touch history, dirty state, revision, or transport.
 
 Imports use high user RAM as staging:
 
@@ -178,6 +183,9 @@ M1.1 fixes those allocations as follows:
 | Rollback snapshot | `0x9200..0xa3ff` | One pre-commit bank, written only by validated commit. |
 | Track 1 profile snapshot | `0xa400..0xa4ff` | 128 authored note words for temporary preview gain. |
 | SFX audition snapshot | `0xa500..0xa543` | Reversible 68-byte snapshot of reserved preview SFX 63. |
+| SFX row clipboard | `0xa544..0xa583` | Session-only 1–32 authored row words; never persisted. |
+| Edit batch swap | `0xa584..0xa5c3` | Exact pre-image for one scalar or row-span Undo/Redo transaction. |
+| Project I/O header | `0xa5c4..0xa603` | Transient 64-byte browser envelope header. |
 
 The regions are disjoint and remain within PICO-8's upper user-data memory.
 M1.1 stage validation uses CRC-16/CCITT-FALSE (`poly=0x1021`, `init=0xffff`,

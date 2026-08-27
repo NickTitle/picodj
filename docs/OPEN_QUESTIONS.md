@@ -51,6 +51,18 @@ fully replace its navigation and editing. Its old behavior remains only in
 Arc 2 replaces the handoff with the native 64-by-32 editor while preserving the
 selected SONG pattern/channel and SFX number on return.
 
+## SFX row clipboard
+
+- **Default now:** conventional SFX support an operation-scoped inclusive row
+  selection for copy and clear, plus an exact validated paste destination. The
+  session-only clipboard owns 1–32 authored 16-bit words and is reusable across
+  conventional slots until the next copy or reboot. Paste and clear are each
+  one atomic transaction in the existing one-level Undo/Redo history. Metadata,
+  waveform samples, persistence, and browser/system clipboards are excluded.
+- **Revisit:** pattern/channel copy, whole-SFX metadata, insert/delete/shift,
+  persistent clipboards, or waveform operations only as separately designed
+  editor features with their own ownership and transport semantics.
+
 ## Waveform SFX editing
 
 - **Default now:** native waveform slots are identifiable and their raw

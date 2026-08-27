@@ -35,7 +35,7 @@ function _init()
  ck(start_audition(0),"row preview")
  ck(not playing and not bank_profile_is_active(),"preview stops restores music")
  ck(same(bank_sfx_addr(1,0),authored,bank_sfx_size*4),"sfx 1-4 exact")
- ck(peek2(bank_sfx_addr(63,0))==bank_note_raw(1,0),"row copied to scratch")
+ ck(peek2(bank_sfx_addr(63,0))==peek2(bank_note_addr(1,0)),"row copied to scratch")
  ck(not bank_dirty and bank_revision==0,"preview metadata clean")
  ck(stop_audition(true),"preview stop resumes")
  ck(same(bank_sfx_addr(63,0),scratch,bank_sfx_size),"scratch restored")
@@ -47,15 +47,26 @@ function _init()
   same(bank_sfx_addr(1,0),authored,bank_sfx_size*4),"whole preview restores bytes")
  sfx_number=1 start_song(0)
  local old=bank_note_authored_raw(1,0)
- ck(song_restore_then(function() return bank_write_word(bank_note_addr(1,0),old^^1) end),
+ ck(song_restore_then(function() return bank_write(bank_note_addr(1,0),2,old^^1) end),
   "active edit")
  ck(playing and bank_profile_is_active() and bank_note_authored_raw(1,0)==(old^^1),
   "stop restore edit restart")
  local filter=bank_sfx_filter(1,1)
- ck(song_restore_then(function() return bank_set_sfx_filter(1,1,1-filter) end),
+ ck(song_restore_then(function()
+  local addr=bank_sfx_addr(1,64)
+  return bank_write(addr,1,peek(addr)+(1-filter*2)*bank_filter_steps[1])
+ end),
   "active filter edit")
  ck(playing and bank_profile_is_active() and bank_sfx_filter(1,1)==1-filter,
   "filter stop restore edit restart")
+ poke2(bank_clip_base,0x1234) sfx_clip_count=1
+ local calls=#music_calls revision=bank_revision
+ ck(not bank_rows(1,0,1,bank_clip_base,false),"batch preflight differs")
+ ck(song_restore_then(function() return bank_rows(1,0,1,bank_clip_base,true) end),
+  "active batch edit")
+ ck(#music_calls==calls+2 and bank_revision==revision+1 and
+  bank_note_authored_raw(1,0)==0x1234 and playing and bank_profile_is_active(),
+  "batch stop restore restart once")
  stats[57]=false transport_tick=3 update_playhead()
  ck(not playing and not bank_profile_is_active(),"native stop restores profile")
  start_song(0)

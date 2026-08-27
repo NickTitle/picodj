@@ -20,9 +20,12 @@ coverage; it is not included in the production cartridge.
   cancels. Other edits retain their staged O-commit/X-cancel behavior.
 - In SFX, Up/Down scrolls all 32 rows and Left/Right selects pitch,
   instrument, built/custom mode, volume, or effect. O edits and tap X returns
-  to the same SONG position. Hold X opens rest, undo/redo, metadata, named
-  conventional filters, and SFX-slot
-  navigation. Metadata exposes all four raw bytes plus speed and loop/LEN.
+  to the same SONG position. Hold X opens row operations, undo/redo, metadata,
+  named conventional filters, and SFX-slot navigation. Row operations include
+  the existing one-row rest toggle plus inclusive copy, paste, and clear:
+  Up/Down selects a range, O confirms, and X cancels. Paste shows and validates
+  its exact destination interval before changing anything. Metadata exposes all
+  four raw bytes plus speed and loop/LEN.
   Waveform slots remain byte-exact, visibly read-only native data.
   Hold X also previews the selected row from row mode or the complete SFX from
   metadata mode through reserved SFX 63 on mixer channel 3; the authored slot
@@ -43,9 +46,14 @@ only after the frame, envelope, and bank checksums agree. JSON/WAV actions
 inside the cartridge remain disabled because the older 78-byte format cannot
 safely represent native edits.
 
-Undo and redo preserve the exact edited byte or word and its dirty state.
-A new edit replaces redo history. Successful save and load establish a new
-clean baseline and clear history; failed transfers leave history available.
+The row clipboard holds 1–32 exact authored words, is reusable across
+conventional SFX slots, and lasts until the next copy or reboot. It is internal
+to the session: save, load, browser storage, and export never include it.
+Undo and redo preserve the exact edited byte span and its prior dirty state;
+an entire paste or clear is one transaction. A new real edit replaces redo
+history. Selection, copy, cancel, rejection, and no-op preserve it. Successful
+save and load establish a new clean baseline and clear history; failed
+transfers leave history available.
 
 ## Browser exports
 
@@ -97,6 +105,6 @@ PICO-8 0.2.7 fixture documented in `docs/PICO8_027_FILTER_FIXTURE.md`;
 waveform slots and fixture-unsupported raw states remain visibly read-only.
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
-plus a calibrated 1,639-token probe. Its pass marker therefore gates the
-shipped cart at or below 6,553 tokens: the documented 20% reserve against
-PICO-8's 8,192-token ceiling.
+plus a calibrated 1,639-token probe. Its pass marker gates the shipped cart at
+or below 6,553 tokens; release verification strengthens that bound to 6,538.
+This preserves the documented 20% reserve against PICO-8's 8,192-token ceiling.

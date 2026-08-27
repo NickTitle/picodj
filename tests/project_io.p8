@@ -26,6 +26,14 @@ function check(ok,label)
  printh("fail: "..label)
 end
 
+function clipboard_intact()
+ if sfx_clip_count!=17 then return false end
+ for i=0,63 do
+  if peek(bank_clip_base+i)!=(i*37+11)&0xff then return false end
+ end
+ return true
+end
+
 function saved_byte(offset)
  if offset<io_header_size then return peek(io_header+offset) end
  return peek(bank_snapshot_base+offset-io_header_size)
@@ -55,6 +63,10 @@ project_test_init=_init
 function _init()
  project_test_init()
  bank_project_init()
+ sfx_clip_count=17
+ for i=0,63 do poke(bank_clip_base+i,(i*37+11)&0xff) end
+ check(bank_clip_base+63<bank_batch_base and bank_batch_base+63<io_header and
+       io_header+io_header_size-1<0x10000,"scratch regions disjoint")
  bank_revision=37
  bank_dirty=true
  local saved_crc=bank_checksum(bank_audio_base)
@@ -76,6 +88,7 @@ function _init()
  io_finish_frame()
  project_io_update()
  check(io_mode=="idle" and undo_owner=="song","failed save preserves history")
+ check(clipboard_intact(),"failed save preserves clipboard")
  check(save_song(),"save retry starts")
  local pages=0
  while io_mode=="save" and pages<50 do
@@ -95,6 +108,7 @@ function _init()
  check(not bank_dirty and notice=="browser slot saved","save read-back ack gates success")
  check(undo_owner==nil,"successful save clears history")
  check(io_get16(io_header+8)==saved_crc,"save header pins authored bank checksum")
+ check(clipboard_intact(),"successful save preserves clipboard")
 
  -- Preserve the saved bank as a fake browser peer, then mutate the live bank.
  memcpy(bank_snapshot_base,bank_audio_base,bank_size)
@@ -109,6 +123,7 @@ function _init()
  check(io_mode=="idle" and io_frame_valid(io_error),"corrupt gpio frame rejected")
  check(bank_checksum(bank_audio_base)==mutated_crc,"corrupt frame preserves live bank")
  check(undo_owner=="sfx","failed load preserves history")
+ check(clipboard_intact(),"failed load preserves clipboard")
 
  check(load_song(),"partial load starts")
  local first_length=emit_saved_page(0,0,false)
@@ -164,6 +179,7 @@ function _init()
  check(bank_revision==37 and not bank_dirty and not bank_snapshot_valid,
        "valid load restores metadata and clean state")
  check(undo_owner==nil,"successful load clears history")
+ check(clipboard_intact(),"successful load preserves clipboard")
 
  if failures==0 then printh("pocket tracker project io: passed")
  else printh("pocket tracker project io: failed "..failures) end

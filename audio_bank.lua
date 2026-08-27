@@ -3,6 +3,7 @@
 bank_audio_base,bank_song_base,bank_sfx_base=0x3100,0x3100,0x3200
 bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200
 bank_profile_base,bank_audition_base=0xa400,0xa500
+bank_clip_base,bank_batch_base=0xa544,0xa584
 bank_audition_sfx,bank_audition_channel=63,3
 
 bank_pattern_count,bank_channel_count,bank_sfx_count=64,4,64
@@ -11,14 +12,6 @@ bank_filter_steps={2,4,8,24,72}
 
 function bank_int(v,lo,hi)
  return type(v)=="number" and v==flr(v) and v>=lo and v<=hi
-end
-
-function bank_byte(v)
- return bank_int(v,0,255)
-end
-
-function bank_bool(v)
- return type(v)=="boolean"
 end
 
 function bank_region(base)
@@ -67,116 +60,72 @@ function bank_note_addr(sfx,row)
  return bank_sfx_base+sfx*bank_sfx_size+row*2
 end
 
-function bank_write_byte(addr,value)
- if bank_profile_active or
-    not bank_int(addr,bank_audio_base,bank_audio_base+bank_size-1) or
-    not bank_byte(value) then return false end
- if peek(addr)==value then return true end
- poke(addr,value)
+function bank_span(addr,size)
+ return bank_int(size,1,64) and bank_int(addr,bank_audio_base,bank_audio_base+bank_size-size)
+end
+
+function bank_write(addr,width,value)
+ if bank_profile_active or not bank_span(addr,width) or width>2 or
+  (width==2 and addr<bank_sfx_base) or type(value)!="number" or value!=flr(value) or
+  (width==1 and not bank_int(value,0,255)) then return false end
+ value=value&(width==1 and 255 or 0xffff)
+ local old=width==1 and peek(addr) or peek2(addr)&0xffff
+ if old==value then return true end
+ if width==1 then poke(addr,value) else poke2(addr,value) end
  bank_touch()
  return true
 end
 
-function bank_write_word(addr,value)
- if bank_profile_active or
-    not bank_int(addr,bank_sfx_base,bank_audio_base+bank_size-2) or
-    type(value)!="number" or value!=flr(value) then return false end
- if (peek2(addr)&0xffff)==(value&0xffff) then return true end
- poke2(addr,value)
+function bank_swap(addr,size)
+ if bank_profile_active or not bank_span(addr,size) then return false end
+ for i=0,size-1 do
+  local value=peek(addr+i)
+  poke(addr+i,peek(bank_batch_base+i))
+  poke(bank_batch_base+i,value)
+ end
  bank_touch()
  return true
 end
 
-function bank_song_raw(pattern,channel)
- local addr=bank_song_addr(pattern,channel)
- return addr and peek(addr) or nil
-end
-
-function bank_pattern_sfx(pattern,channel)
- local value=bank_song_raw(pattern,channel)
- return value and value&0x3f or nil
-end
-
-function bank_set_pattern_sfx(pattern,channel,sfx)
- local addr=bank_song_addr(pattern,channel)
- if not addr or not bank_int(sfx,0,bank_sfx_count-1) then return false end
- return bank_write_byte(addr,(peek(addr)&0xc0)|sfx)
-end
-
-function bank_pattern_muted(pattern,channel)
- local value=bank_song_raw(pattern,channel)
- if value==nil then return nil end
- return (value&0x40)!=0
-end
-
-function bank_set_pattern_muted(pattern,channel,muted)
- local addr=bank_song_addr(pattern,channel)
- if not addr or not bank_bool(muted) then return false end
- local value=peek(addr)
- value=muted and (value|0x40) or (value&0xbf)
- return bank_write_byte(addr,value)
-end
-
-function bank_pattern_flag(pattern,channel)
- if not bank_int(channel,0,2) then return nil end
- local value=bank_song_raw(pattern,channel)
- if value==nil then return nil end
- return (value&0x80)!=0
-end
-
-function bank_set_pattern_flag(pattern,channel,enabled)
- if not bank_int(channel,0,2) then return false end
- local addr=bank_song_addr(pattern,channel)
- if not addr or not bank_bool(enabled) then return false end
- local value=peek(addr)
- value=enabled and (value|0x80) or (value&0x7f)
- return bank_write_byte(addr,value)
-end
-
-function bank_pattern_loop_start(pattern)
- return bank_pattern_flag(pattern,0)
-end
-
-function bank_set_pattern_loop_start(pattern,enabled)
- return bank_set_pattern_flag(pattern,0,enabled)
-end
-
-function bank_pattern_loop_back(pattern)
- return bank_pattern_flag(pattern,1)
-end
-
-function bank_set_pattern_loop_back(pattern,enabled)
- return bank_set_pattern_flag(pattern,1,enabled)
-end
-
-function bank_pattern_stop(pattern)
- return bank_pattern_flag(pattern,2)
-end
-
-function bank_set_pattern_stop(pattern,enabled)
- return bank_set_pattern_flag(pattern,2,enabled)
-end
-
-function bank_note_raw(sfx,row)
- local addr=bank_note_addr(sfx,row)
- return addr and peek2(addr) or nil
+function bank_field(addr,width,shift,mask,value)
+ if not bank_span(addr,width) or width>2 or (width==2 and addr<bank_sfx_base) or
+  not bank_int(shift,0,width*8-1) or not bank_int(mask,0,255) then
+  if value==nil then return nil end return false
+ end
+ local raw=width==1 and peek(addr) or peek2(addr)
+ if value==nil then return (raw>>shift)&mask end
+ if not bank_int(value,0,mask) then return false end
+ return bank_write(addr,width,(raw&(0xffff^^(mask<<shift)))|(value<<shift))
 end
 
 function bank_note_authored_raw(sfx,row)
- if not bank_note_addr(sfx,row) then return nil end
+ local addr=bank_note_addr(sfx,row)
+ if not addr then return nil end
  if bank_profile_active and sfx>=1 and sfx<=4 then
   return peek2(bank_profile_base+(sfx-1)*64+row*2)
  end
- return bank_note_raw(sfx,row)
+ return peek2(addr)
 end
 
-function bank_note_field(sfx,row,shift,mask,value)
+function bank_rows(sfx,row,count,source,write)
+ if not bank_int(row,0,bank_row_count-1) or not bank_int(count,1,bank_row_count) or
+  row+count>bank_row_count or not bank_note_addr(sfx,row) or
+  (source!=nil and source!=bank_clip_base) then return nil end
  local addr=bank_note_addr(sfx,row)
- if not addr then if value==nil then return nil end return false end
- local raw=peek2(addr)
- if value==nil then return (raw>>shift)&mask end
- if not bank_int(value,0,mask) then return false end
- return bank_write_word(addr,(raw&(0xffff^^(mask<<shift)))|(value<<shift))
+ local authored=bank_profile_active and sfx>=1 and sfx<=4 and
+  bank_profile_base+(sfx-1)*64+row*2 or addr
+ local bytes=count*2
+ if write==nil then memcpy(bank_clip_base,authored,bytes) return true end
+ local same=true
+ for i=0,bytes-1 do
+  if peek(authored+i)!=(source and peek(source+i) or 0) then same=false end
+ end
+ if not write or same then return same end
+ if bank_profile_active then return false end
+ memcpy(bank_batch_base,addr,bytes)
+ if source then memcpy(addr,source,bytes) else memset(addr,0,bytes) end
+ bank_touch()
+ return true
 end
 
 function bank_sfx_meta_raw(sfx,index)
@@ -185,59 +134,11 @@ function bank_sfx_meta_raw(sfx,index)
  return addr and peek(addr) or nil
 end
 
-function bank_set_sfx_meta_raw(sfx,index,value)
- if not bank_int(index,0,3) or not bank_byte(value) then return false end
- local addr=bank_sfx_addr(sfx,64+index)
- if not addr then return false end
- return bank_write_byte(addr,value)
-end
-
 function bank_sfx_filter(sfx,index)
  local raw=bank_sfx_meta_raw(sfx,0)
  local step=bank_filter_steps[index]
  if not step or raw==nil or raw>0xd7 or bank_sfx_is_waveform(sfx) then return nil end
  return flr(raw/step)%(index<3 and 2 or 3)
-end
-
-function bank_set_sfx_filter(sfx,index,value)
- local old=bank_sfx_filter(sfx,index)
- local step=bank_filter_steps[index]
- if old==nil or not bank_int(value,0,index<3 and 1 or 2) then return false end
- local raw=bank_sfx_meta_raw(sfx,0)
- return bank_set_sfx_meta_raw(sfx,0,raw+(value-old)*step)
-end
-
-function bank_sfx_speed(sfx)
- return bank_sfx_meta_raw(sfx,1)
-end
-
-function bank_set_sfx_speed(sfx,value)
- if not bank_int(value,1,255) or bank_sfx_is_waveform(sfx) then return false end
- return bank_set_sfx_meta_raw(sfx,1,value)
-end
-
-function bank_sfx_loop_start(sfx)
- local value=bank_sfx_meta_raw(sfx,2)
- return value and value&0x1f or nil
-end
-
-function bank_set_sfx_loop_start(sfx,value)
- if not bank_int(value,0,31) or bank_sfx_is_waveform(sfx) then return false end
- local raw=bank_sfx_meta_raw(sfx,2)
- if raw==nil then return false end
- return bank_set_sfx_meta_raw(sfx,2,(raw&0xe0)|value)
-end
-
-function bank_sfx_loop_end(sfx)
- local value=bank_sfx_meta_raw(sfx,3)
- return value and value&0x1f or nil
-end
-
-function bank_set_sfx_loop_end(sfx,value)
- if not bank_int(value,0,31) or bank_sfx_is_waveform(sfx) then return false end
- local raw=bank_sfx_meta_raw(sfx,3)
- if raw==nil then return false end
- return bank_set_sfx_meta_raw(sfx,3,(raw&0xe0)|value)
 end
 
 function bank_equal(a,b)

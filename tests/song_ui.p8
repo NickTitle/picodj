@@ -16,6 +16,14 @@ function check(ok,label)
  failures+=1
  printh("fail: "..label)
 end
+function raw_song(pattern,channel) return peek(bank_song_addr(pattern,channel)) end
+function move_pattern(delta)
+ song_pattern=mid(0,song_pattern+delta,bank_pattern_count-1)
+ song_keep_visible()
+end
+function move_channel(delta)
+ song_channel=mid(0,song_channel+delta,bank_channel_count-1)
+end
 
 function native_music(pattern,fade,mask)
  add(music_calls,{pattern,fade,mask})
@@ -57,8 +65,8 @@ function _init()
  -- The main cartridge, not only the fixture cart, boots the canonical bank.
  check((bank_checksum(bank_audio_base)&0xffff)==song_expected_crc,
        "main cartridge canonical crc")
- check(bank_song_raw(0,0)==0x81 and bank_song_raw(0,1)==0x82 and
-       bank_song_raw(0,2)==3 and bank_song_raw(0,3)==4,
+check(raw_song(0,0)==0x81 and raw_song(0,1)==0x82 and
+       raw_song(0,2)==3 and raw_song(0,3)==4,
        "main cartridge pattern 00")
 check(app_view=="song" and song_error==nil and not bank_dirty and
        bank_revision==0 and song_mix==0 and song_active=="a----",
@@ -76,15 +84,15 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
 
  -- All 64 patterns and four channels are reachable without wraparound.
  action_gate=false reset_action_input()
- song_move_pattern(63)
- song_move_channel(3)
+ move_pattern(63)
+ move_channel(3)
  check(song_pattern==63 and song_channel==3 and song_scroll==54,
        "last pattern channel and scroll")
- song_move_pattern(1)
- song_move_channel(1)
+ move_pattern(1)
+ move_channel(1)
  check(song_pattern==63 and song_channel==3,"upper bounds clamp")
- song_move_pattern(-63)
- song_move_channel(-3)
+ move_pattern(-63)
+ move_channel(-3)
  check(song_pattern==0 and song_channel==0 and song_scroll==0,
        "first pattern channel and scroll")
 
@@ -107,7 +115,7 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  local before=peek(edit_addr)
  local revision=bank_revision
  check(song_commit_edit(),"commit sfx edit")
- local after=bank_song_raw(63,3)
+ local after=raw_song(63,3)
  check(after==0xc6,"commit stores complete byte")
  check_unrelated(before,after,0x3f,"sfx preserves mute/reserved")
  check(bank_dirty and bank_revision==revision+1,"commit dirty revision")
@@ -119,11 +127,11 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  check(song_begin_edit("sfx"),"begin cancel edit")
  song_edit_candidate(1)
  song_cancel_edit()
- check(bank_song_raw(63,3)==before and bank_revision==revision and
+ check(raw_song(63,3)==before and bank_revision==revision and
        bank_dirty==dirty,"cancel preserves byte dirty revision")
  check(song_begin_edit("sfx"),"begin no-op edit")
  check(song_commit_edit(),"no-op commit")
- check(bank_song_raw(63,3)==before and bank_revision==revision and
+ check(raw_song(63,3)==before and bank_revision==revision and
        bank_dirty==dirty,"no-op preserves byte dirty revision")
 
  -- Every channel mute owns only bit 6.
@@ -131,10 +139,10 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
   reset_ui()
   song_pattern=1
   song_channel=ch
-  before=bank_song_raw(1,ch)
+  before=raw_song(1,ch)
   check(song_begin_edit("mute"),"begin mute "..ch)
   check(song_commit_edit(),"commit mute "..ch)
-  after=bank_song_raw(1,ch)
+  after=raw_song(1,ch)
   check(after==(before^^0x40),"mute toggles bit "..ch)
   check_unrelated(before,after,0x40,"mute preserves bits "..ch)
  end
@@ -143,15 +151,15 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  reset_ui()
  song_pattern=1
  song_channel=0
- before=bank_song_raw(1,0)
+ before=raw_song(1,0)
  check(song_begin_edit("mute"),"begin undo edit")
  check(song_commit_edit(),"commit undo edit")
- after=bank_song_raw(1,0)
+ after=raw_song(1,0)
  check(after==(before^^0x40),"mute toggles owned bit")
  check_unrelated(before,after,0x40,"mute preserves unrelated bits")
  revision=bank_revision
  check(song_undo(),"undo succeeds")
- check(bank_song_raw(1,0)==before,"undo restores full byte")
+ check(raw_song(1,0)==before,"undo restores full byte")
  check(not bank_dirty and bank_revision==revision+1,
        "undo restores clean and advances revision")
  revision=bank_revision
@@ -164,22 +172,22 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  check(song_commit_edit() and undo_width<0 and bank_revision==revision,
        "no-op preserves redo")
  check(song_undo(),"redo succeeds")
- check(bank_song_raw(1,0)==after and bank_dirty and
+ check(raw_song(1,0)==after and bank_dirty and
        bank_revision==revision+1 and undo_width>0,
        "redo restores post byte dirty and advances revision")
  revision=bank_revision
- check(song_undo() and bank_song_raw(1,0)==before and not bank_dirty and
+ check(song_undo() and raw_song(1,0)==before and not bank_dirty and
        bank_revision==revision+1,"second undo restores pre state")
 
  -- A new real edit replaces the available redo transaction.
- local replacement_before=bank_song_raw(1,0)
+ local replacement_before=raw_song(1,0)
  check(song_begin_edit("sfx"),"begin replacement edit")
  edit_value=(edit_value+1)%64
  check(song_commit_edit() and undo_width>0,"new edit replaces redo phase")
- local replacement_after=bank_song_raw(1,0)
- check(song_undo() and bank_song_raw(1,0)==replacement_before,
+ local replacement_after=raw_song(1,0)
+ check(song_undo() and raw_song(1,0)==replacement_before,
        "replacement undo restores its own pre byte")
- check(song_undo() and bank_song_raw(1,0)==replacement_after,
+ check(song_undo() and raw_song(1,0)==replacement_after,
        "replacement redo restores its own post byte")
 
  -- Flow flags preserve every other bit; channel four remains reserved.
@@ -187,21 +195,21 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
   reset_ui()
   song_pattern=1
   song_channel=ch
-  before=bank_song_raw(1,ch)
+  before=raw_song(1,ch)
   check(song_begin_edit("flow"),"begin flow "..ch)
   check(song_commit_edit(),"commit flow "..ch)
-  after=bank_song_raw(1,ch)
+  after=raw_song(1,ch)
   check(after==(before^^0x80),"flow toggles bit "..ch)
   check_unrelated(before,after,0x80,"flow preserves bits "..ch)
  end
  reset_ui()
  song_pattern=1
  song_channel=3
- before=bank_song_raw(1,3)
+ before=raw_song(1,3)
  revision=bank_revision
  check(not song_begin_edit("flow") and song_error!=nil,
        "reserved flow rejected visibly")
- check(bank_song_raw(1,3)==before and bank_revision==revision,
+ check(raw_song(1,3)==before and bank_revision==revision,
        "reserved flow preserves byte revision")
 
  -- Active playback stops/restores, edits, reapplies, and restarts natively.
@@ -212,18 +220,18 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  check(playing and bank_profile_is_active() and music_calls[1][1]==63 and
        music_calls[1][3]==0xf,
        "music pattern and profile active")
- before=bank_song_raw(63,0)
+ before=raw_song(63,0)
  check(song_begin_edit("mute"),"begin edit during play")
  check(song_commit_edit(),"commit edit during play")
  check(playing and bank_profile_is_active(),"playback restarts")
  check(#music_calls==3 and music_calls[2][1]==-1 and music_calls[3][1]==63,
        "edit uses stop restore restart")
- check(bank_song_raw(63,0)==(before^^0x40),"active edit is not dropped")
+ check(raw_song(63,0)==(before^^0x40),"active edit is not dropped")
  check(song_undo() and playing and bank_profile_is_active() and
-       bank_song_raw(63,0)==before and #music_calls==5,
+       raw_song(63,0)==before and #music_calls==5,
        "active undo stops restores swaps restarts")
  check(song_undo() and playing and bank_profile_is_active() and
-       bank_song_raw(63,0)==(before^^0x40) and #music_calls==7,
+       raw_song(63,0)==(before^^0x40) and #music_calls==7,
        "active redo stops restores swaps restarts")
  check(stop_song() and not bank_profile_is_active(),"native playback restores")
 
@@ -235,7 +243,7 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  song_scroll=54
  song_open_sfx()
  check(app_view=="sfx" and sfx_pattern==63 and sfx_channel==3 and
-       sfx_number==bank_pattern_sfx(63,3),"sfx handoff identity")
+       sfx_number==(raw_song(63,3)&0x3f),"sfx handoff identity")
  action_gate=false reset_action_input()
  song_return_from_sfx()
  check(song_pattern==63 and song_channel==3 and song_scroll==54,

@@ -5,7 +5,8 @@ __lua__
 
 failures=0
 song_menu_items={"sfx","mute","flow","mix","undo","play","follow"}
-sfx_menu_items=split"preview,metadata,filters,rest,undo,prev sfx,next sfx"
+sfx_menu_items=split"preview,metadata,filters,row ops,undo,prev sfx,next sfx"
+sfx_row_menu=split"rest,copy rows,paste rows,clear rows"
 
 function check(ok,label)
  if ok then return end
@@ -20,6 +21,7 @@ function song_open_sfx() sfx_open_calls+=1 app_view="sfx" end
 function song_return_from_sfx() return_calls+=1 app_view="song" end
 function sfx_begin_edit() edit_calls+=1 end
 function sfx_toggle_rest() rest_calls+=1 end
+function sfx_rows_begin(op) row_op=op return true end
 function song_mix_apply() mix_apply_calls+=1 end
 function song_mix_label(mode,channel)
  return mode==0 and "all" or sub("ms",mode,mode)..(channel+1)
@@ -34,6 +36,7 @@ function reset_fixture(view)
  save_calls,load_calls,play_calls=0,0,0
  sfx_open_calls,return_calls,edit_calls,rest_calls=0,0,0,0
  mix_apply_calls=0
+ row_op=nil
  sfx_mode="rows"
  notice=""
  undo_owner=nil undo_width=1
@@ -98,6 +101,10 @@ function _init()
  check(context_label("undo")=="redo","sfx redo label")
  context_apply("filters")
  check(sfx_mode=="filters" and sfx_filter_field==1,"filter menu route")
+ context_menu="sfx" context_apply("row ops")
+ check(context_menu=="row ops" and context_gate,"row ops submenu")
+ context_gate=false context_item=2 context_apply("copy rows")
+ check(row_op==1 and context_menu==nil,"copy rows route")
  context_menu=nil
 
  -- The SFX chord remains one rest toggle and quick X returns to SONG.

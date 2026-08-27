@@ -10,6 +10,7 @@ function say() end
 function song_restore_then(action) return action() end
 function ck(v,s) if not v then fails+=1 printh("fail: "..s) end end
 function own(a,b,m,s) ck(((a^^b)&(0xffff^^m))==0,s) end
+function raw(s,r) local a=bank_note_addr(s,r) return a and peek2(a) end
 function setup()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
  bank_project_init() playing=false audition_active=false
@@ -20,11 +21,11 @@ function setup()
 end
 function edit(field,value,mask)
  sfx_field=field
- local before=bank_note_raw(63,31)
+ local before=raw(63,31)
  ck(sfx_begin_edit(),"begin field "..field)
  edit_value=value
  ck(edit_commit(),"commit field "..field)
- own(before,bank_note_raw(63,31),mask,"owned field "..field)
+ own(before,raw(63,31),mask,"owned field "..field)
 end
 function _init()
  setup()
@@ -32,43 +33,43 @@ function _init()
  sfx_change_slot(80) ck(sfx_number==63,"slot 3f")
  sfx_row=31 sfx_keep_visible() ck(sfx_scroll==23,"row 31 visible")
  poke2(bank_note_addr(63,31),0xd6a5) bank_project_init()
- local word_before=bank_note_raw(63,31)
+ local word_before=raw(63,31)
  edit(1,17,0x003f)
- local word_after=bank_note_raw(63,31) local rev=bank_revision
- ck(sfx_undo() and bank_note_raw(63,31)==word_before and bank_revision==rev+1,
+ local word_after=raw(63,31) local rev=bank_revision
+ ck(edit_undo("sfx") and raw(63,31)==word_before and bank_revision==rev+1,
   "word undo exact")
  rev=bank_revision
- ck(sfx_undo() and bank_note_raw(63,31)==word_after and bank_revision==rev+1,
+ ck(edit_undo("sfx") and raw(63,31)==word_after and bank_revision==rev+1,
   "word redo exact")
  edit(2,6,0x01c0) edit(3,0,0x8000)
  edit(4,7,0x0e00) edit(5,3,0x7000)
- local before=bank_note_raw(63,31) rev=bank_revision
+ local before=raw(63,31) rev=bank_revision
  sfx_field=1 ck(sfx_begin_edit(),"begin cancel")
  edit_value=22 edit_cancel()
- ck(bank_note_raw(63,31)==before and bank_revision==rev,"cancel exact")
+ ck(raw(63,31)==before and bank_revision==rev,"cancel exact")
  setup() poke2(bank_note_addr(63,31),0xd6a5) bank_project_init()
- before=bank_note_raw(63,31)
- ck(sfx_toggle_rest() and bank_note_raw(63,31)==0,"rest")
- rev=bank_revision ck(sfx_undo(),"undo")
- ck(bank_note_raw(63,31)==before and not bank_dirty and bank_revision==rev+1,
+ before=raw(63,31)
+ ck(sfx_toggle_rest() and raw(63,31)==0,"rest")
+ rev=bank_revision ck(edit_undo("sfx"),"undo")
+ ck(raw(63,31)==before and not bank_dirty and bank_revision==rev+1,
   "undo exact clean")
- rev=bank_revision ck(undo_width<0 and sfx_undo(),"redo")
- ck(bank_note_raw(63,31)==0 and bank_dirty and bank_revision==rev+1 and undo_width>0,
+ rev=bank_revision ck(undo_width<0 and edit_undo("sfx"),"redo")
+ ck(raw(63,31)==0 and bank_dirty and bank_revision==rev+1 and undo_width>0,
   "redo exact dirty")
- rev=bank_revision ck(sfx_undo(),"undo again")
- ck(bank_note_raw(63,31)==before and not bank_dirty and bank_revision==rev+1,
+ rev=bank_revision ck(edit_undo("sfx"),"undo again")
+ ck(raw(63,31)==before and not bank_dirty and bank_revision==rev+1,
   "second undo exact clean")
  setup() sfx_row=0 sfx_mode="meta"
  poke(bank_sfx_addr(63,66),0xa2) poke(bank_sfx_addr(63,67),0xc0)
  bank_project_init()
  sfx_meta_field=1 ck(sfx_begin_edit(),"speed begin")
  local speed_before=bank_sfx_meta_raw(63,1)
- edit_value=31 ck(edit_commit() and bank_sfx_speed(63)==31,"speed")
+ edit_value=31 ck(edit_commit() and bank_sfx_meta_raw(63,1)==31,"speed")
  rev=bank_revision
- ck(sfx_undo() and bank_sfx_meta_raw(63,1)==speed_before and
+ ck(edit_undo("sfx") and bank_sfx_meta_raw(63,1)==speed_before and
     bank_revision==rev+1,"metadata undo exact")
  rev=bank_revision
- ck(sfx_undo() and bank_sfx_speed(63)==31 and bank_revision==rev+1,
+ ck(edit_undo("sfx") and bank_sfx_meta_raw(63,1)==31 and bank_revision==rev+1,
     "metadata redo exact")
  sfx_meta_field=2 ck(sfx_begin_edit(),"len begin")
  edit_value=12 ck(edit_commit(),"len commit")
@@ -76,6 +77,15 @@ function _init()
  sfx_meta_field=3 ck(sfx_begin_edit(),"end begin")
  edit_value=7 ck(edit_commit(),"end commit")
  ck(bank_sfx_meta_raw(63,3)==0xc7,"end reserved")
+ setup() put=nil
+ poke2(bank_note_addr(63,3),0x8001) poke2(bank_note_addr(63,4),0x70c2)
+ bank_project_init() sfx_row=4
+ ck(sfx_rows_begin(1),"row copy begin") sfx_row=3
+ ck(sfx_rows_apply() and sfx_clip_count==2,"reversed row copy")
+ sfx_number=62 sfx_row=30
+ ck(sfx_rows_begin(2) and sfx_rows_apply() and
+  (raw(62,30)&0xffff)==0x8001 and
+  (raw(62,31)&0xffff)==0x70c2,"row paste ui")
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end
  extcmd("shutdown")
