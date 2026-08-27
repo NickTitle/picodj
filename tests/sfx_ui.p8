@@ -106,7 +106,11 @@ function _init()
  sfx_meta_field=4
  ck(sfx_begin_edit() and edit_label=="mode" and edit_value==0,"notes mode begin")
  edit_value=1 ck(edit_commit() and bank_sfx_is_waveform(0),"wave mode commit")
- sfx_number=8 sfx_meta_field=4 sfx_error=nil
+ sfx_mode="filters" sfx_filter_field=2
+ ck(sfx_begin_edit() and edit_label=="reverb" and edit_value==0,"wave filter begin")
+ edit_value=2
+ ck(edit_commit() and bank_sfx_filter(0,4)==2,"wave filter commit")
+ sfx_number=8 sfx_mode="meta" sfx_meta_field=4 sfx_error=nil
  ck(not sfx_begin_edit() and sfx_error=="mode unavailable","mode limited to sfx 0-7")
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end

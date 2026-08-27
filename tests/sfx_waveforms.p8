@@ -165,9 +165,12 @@ function _init()
  ck(sample(1)==raw and bank_revision==rev and bank_dirty==dirty and
   undo_owner==owner and undo_width==width and undo_addr==addr,"no-op exact")
 
- -- Other metadata/range/preview remain read-only while bass is available.
- sfx_mode="filters" sfx_filter_field=1
- ck(not sfx_begin_edit() and sfx_error=="waveform filters read only","filter reject")
+ -- Only fixture-backed waveform filters are editable; range/preview stay unavailable.
+ sfx_mode="filters" sfx_filter_field=4
+ ck(not sfx_begin_edit() and sfx_error=="filter unavailable","filter reject")
+ sfx_filter_field=1 sfx_error=nil
+ ck(sfx_begin_edit() and edit_label=="detune","filter begin") edit_value=1
+ ck(edit_commit() and bank_sfx_filter(0,3)==1,"filter commit")
  sfx_mode="rows" sfx_error=nil
  ck(not sfx_rows_begin(1) and not sfx_toggle_rest(),"range reject")
  ck(not start_audition() and sfx_error=="preview unavailable","preview reject")

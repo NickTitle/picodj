@@ -107,7 +107,10 @@ same byte-span history and stop/restore/restart transaction as conventional
 edits. Metadata keeps all four bytes visible; the native fixture-proven bass
 field owns only bit 0 of byte 65, while mode for SFX 0–7 owns only bit 7 of byte
 66. Switching notes/wave reinterprets the same 64 payload bytes and preserves
-every other byte and bit. Remaining waveform metadata stays read-only. Import, save/load, JSON,
+every other byte and bit. The native filter matrix proves DETUNE, REVERB, and
+DAMPEN retain their conventional mixed-radix digits `8/24/72` in byte 64 for
+waveforms; NOIZ/BUZZ and fixture-unsupported raw states remain read-only.
+Remaining waveform metadata stays read-only. Import, save/load, JSON,
 and authored/materialized `.p8` codecs preserve the complete 68-byte slot
 without decoding samples as notes.
 

@@ -36,27 +36,22 @@ function bank_mark_clean()
 end
 
 function bank_song_addr(pattern,channel)
- if not bank_int(pattern,0,bank_pattern_count-1) or
-    not bank_int(channel,0,bank_channel_count-1) then return nil end
+ if not bank_int(pattern,0,63) or not bank_int(channel,0,3) then return end
  return bank_song_base+pattern*4+channel
 end
 
 function bank_sfx_addr(sfx,offset)
- if not bank_int(sfx,0,bank_sfx_count-1) or
-    not bank_int(offset,0,bank_sfx_size-1) then return nil end
+ if not bank_int(sfx,0,63) or not bank_int(offset,0,67) then return end
  return bank_sfx_base+sfx*bank_sfx_size+offset
 end
 
 function bank_sfx_is_waveform(sfx)
  local addr=bank_sfx_addr(sfx,66)
- if not addr then return nil end
- return sfx<8 and (peek(addr)&0x80)!=0
+ return addr and sfx<8 and peek(addr)&0x80!=0
 end
 
 function bank_note_addr(sfx,row)
- if not bank_int(sfx,0,bank_sfx_count-1) or
-    not bank_int(row,0,bank_row_count-1) then return nil end
- if sfx<8 and bank_sfx_is_waveform(sfx) then return nil end
+ if not bank_int(sfx,0,63) or not bank_int(row,0,31) or bank_sfx_is_waveform(sfx) then return end
  return bank_sfx_base+sfx*bank_sfx_size+row*2
 end
 
@@ -90,7 +85,7 @@ end
 function bank_field(addr,width,shift,mask,value)
  if not bank_span(addr,width) or width>2 or (width==2 and addr<bank_sfx_base) or
   not bank_int(shift,0,width*8-1) or not bank_int(mask,0,255) then
-  if value==nil then return nil end return false
+  if value==nil then return end return false
  end
  local raw=width==1 and peek(addr) or peek2(addr)
  if value==nil then return (raw>>shift)&mask end
@@ -100,7 +95,7 @@ end
 
 function bank_note_authored_raw(sfx,row)
  local addr=bank_note_addr(sfx,row)
- if not addr then return nil end
+ if not addr then return end
  if bank_profile_active and sfx>=1 and sfx<=4 then
   return peek2(bank_profile_base+(sfx-1)*64+row*2)
  end
@@ -110,7 +105,7 @@ end
 function bank_rows(sfx,row,count,source,write)
  if not bank_int(row,0,bank_row_count-1) or not bank_int(count,1,bank_row_count) or
   row+count>bank_row_count or not bank_note_addr(sfx,row) or
-  (source!=nil and source!=bank_clip_base) then return nil end
+  (source!=nil and source!=bank_clip_base) then return end
  local addr=bank_note_addr(sfx,row)
  local authored=bank_profile_active and sfx>=1 and sfx<=4 and
   bank_profile_base+(sfx-1)*64+row*2 or addr
@@ -129,16 +124,15 @@ function bank_rows(sfx,row,count,source,write)
 end
 
 function bank_sfx_meta_raw(sfx,index)
- if not bank_int(index,0,3) then return nil end
- local addr=bank_sfx_addr(sfx,64+index)
- return addr and peek(addr) or nil
+ local addr=bank_int(index,0,3) and bank_sfx_addr(sfx,64+index)
+ return addr and peek(addr)
 end
 
 function bank_sfx_filter(sfx,index)
- local raw=bank_sfx_meta_raw(sfx,0)
- local step=bank_filter_steps[index]
- if not step or raw==nil or raw>0xd7 or bank_sfx_is_waveform(sfx) then return nil end
- return flr(raw/step)%(index<3 and 2 or 3)
+ local raw,step=bank_sfx_meta_raw(sfx,0),bank_filter_steps[index]
+ if not step or not raw or raw>0xd7 or
+  index<3 and bank_sfx_is_waveform(sfx) then return end
+ return flr(raw/step)%(2+index\3)
 end
 
 function bank_equal(a,b)
@@ -154,8 +148,7 @@ end
 -- the result is a signed pico-8 16-bit bit pattern; mask with 0xffff when
 -- presenting it outside the vm.
 function bank_checksum(base)
- if not bank_region(base) then return nil end
- if base==bank_audio_base and bank_profile_active then return nil end
+ if not bank_region(base) or base==bank_audio_base and bank_profile_active then return end
  local crc=0xffff
  for i=0,bank_size-1 do
   crc=(crc^^(peek(base+i)<<8))&0xffff

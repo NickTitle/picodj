@@ -165,6 +165,7 @@ waveformEnvelope[waveformBase] = 0x00;
 waveformEnvelope[waveformBase + 1] = 0x7f;
 waveformEnvelope[waveformBase + 62] = 0x80;
 waveformEnvelope[waveformBase + 63] = 0xff;
+waveformEnvelope[waveformBase + 64] = 0xd0;
 waveformEnvelope[waveformBase + 65] = 0xa5;
 waveformEnvelope[waveformBase + 66] |= 0x80;
 for (const sfx of [1, 4]) {
@@ -189,6 +190,8 @@ for (const representation of ['authored', 'materialized']) {
       `${representation} PICO-8 export preserves waveform SFX ${sfx}`);
     assert.equal(parsed.bank[bankBase + 65], 0xa5,
       `${representation} PICO-8 export preserves SFX ${sfx} bass and reserved bits`);
+    assert.equal(parsed.bank[bankBase + 64], 0xd0,
+      `${representation} PICO-8 export preserves SFX ${sfx} waveform filter digits`);
   }
 }
 const waveformMaterialized = io.materializedBank(waveformEnvelope);
@@ -269,6 +272,23 @@ assert.deepEqual(modeDeltas, [[0x142, 0x00, 0x80]],
 assert.deepEqual(Array.from(modeNotes.bank.slice(0x100, 0x140)),
   Array.from(modeWave.bank.slice(0x100, 0x140)), 'mode fixture keeps all 64 payload bytes exact');
 assert.equal(modeNotes.bank[0x141], modeWave.bank[0x141]);
+const waveformFilters = io.parseP8Audio(fs.readFileSync(
+  'tests/fixtures/pico8-027-waveform-filters.p8', 'utf8'));
+const waveformFilterRaw = [0x00, 0x08, 0x10, 0x18, 0x30, 0x48, 0x90];
+for (let sfx = 0; sfx < waveformFilterRaw.length; sfx++) {
+  const base = 0x100 + sfx * 68;
+  assert.equal(waveformFilters.bank[base + 64], waveformFilterRaw[sfx],
+    `native waveform filter fixture raw slot ${sfx}`);
+  assert.deepEqual(Array.from(waveformFilters.bank.slice(base, base + 64)),
+    Array.from(waveformFilters.bank.slice(0x100, 0x140)),
+    `native waveform filter fixture payload slot ${sfx}`);
+  assert.deepEqual(Array.from(waveformFilters.bank.slice(base + 65, base + 68)),
+    Array.from(waveformFilters.bank.slice(0x141, 0x144)),
+    `native waveform filter fixture metadata slot ${sfx}`);
+}
+assert.equal(waveformFilters.bank[0x100 + 8 * 68] |
+  (waveformFilters.bank[0x101 + 8 * 68] << 8), 0x8a18,
+  'native waveform filter fixture keeps its conventional playback reference');
 
 const malformedP8 = authored.replace(/^([0-9a-f]{8})[0-9a-f]{2}/m, '$1ff');
 assert.equal(io.parseP8Audio(malformedP8), null, 'out-of-range PICO-8 note pitch is rejected');
