@@ -58,20 +58,21 @@ selected SONG pattern/channel and SFX number on return.
   session-only clipboard owns 1–32 authored 16-bit words and is reusable across
   conventional slots until the next copy or reboot. Paste and clear are each
   one atomic transaction in the existing one-level Undo/Redo history. Metadata,
-  waveform samples, persistence, and browser/system clipboards are excluded.
+  waveform ranges, persistence, and browser/system clipboards are excluded.
 - **Revisit:** pattern/channel copy, whole-SFX metadata, insert/delete/shift,
   persistent clipboards, or waveform operations only as separately designed
   editor features with their own ownership and transport semantics.
 
 ## Waveform SFX editing
 
-- **Default now:** native waveform slots are identifiable and their raw
-  metadata remains inspectable, but the 64 sample bytes and metadata are
-  read-only. Note and semantic metadata actions fail visibly without changing
-  dirty/revision state.
-- **Revisit:** add a waveform-specific sample editor only with byte-level
-  fixtures and a six-button interaction design; do not reinterpret samples as
-  packed note words.
+- **Default now:** classified native waveform slots expose all 64 signed sample
+  bytes as 32 raw-hex pairs. Up/Down selects a pair, Left/Right selects its
+  even/odd byte, and the existing wrapping scalar editor commits one exact byte
+  through atomic Undo/Redo. Raw waveform metadata remains inspectable and
+  read-only. Invalid, cancel, and no-op actions preserve history and transport.
+- **Revisit:** waveform mode conversion, metadata/bass editing, range
+  copy/paste/clear, and direct preview require separate ownership and audition
+  designs; never reinterpret sample bytes as packed note words.
 
 ## SFX audition channel
 

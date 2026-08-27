@@ -34,6 +34,14 @@ function clipboard_intact()
  return true
 end
 
+function waveform_intact()
+ if not bank_sfx_is_waveform(0) then return false end
+ for i=0,63 do
+  if peek(bank_sfx_addr(0,i))!=(i*29+7)&0xff then return false end
+ end
+ return true
+end
+
 function saved_byte(offset)
  if offset<io_header_size then return peek(io_header+offset) end
  return peek(bank_snapshot_base+offset-io_header_size)
@@ -63,6 +71,8 @@ project_test_init=_init
 function _init()
  project_test_init()
  bank_project_init()
+ for i=0,63 do poke(bank_sfx_addr(0,i),(i*29+7)&0xff) end
+ poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
  sfx_clip_count=17
  for i=0,63 do poke(bank_clip_base+i,(i*37+11)&0xff) end
  check(bank_clip_base+63<bank_batch_base and bank_batch_base+63<io_header and
@@ -89,6 +99,7 @@ function _init()
  project_io_update()
  check(io_mode=="idle" and undo_owner=="song","failed save preserves history")
  check(clipboard_intact(),"failed save preserves clipboard")
+ check(waveform_intact(),"failed save preserves waveform")
  check(save_song(),"save retry starts")
  local pages=0
  while io_mode=="save" and pages<50 do
@@ -109,6 +120,7 @@ function _init()
  check(undo_owner==nil,"successful save clears history")
  check(io_get16(io_header+8)==saved_crc,"save header pins authored bank checksum")
  check(clipboard_intact(),"successful save preserves clipboard")
+ check(waveform_intact(),"successful save preserves waveform")
 
  -- Preserve the saved bank as a fake browser peer, then mutate the live bank.
  memcpy(bank_snapshot_base,bank_audio_base,bank_size)
@@ -124,6 +136,7 @@ function _init()
  check(bank_checksum(bank_audio_base)==mutated_crc,"corrupt frame preserves live bank")
  check(undo_owner=="sfx","failed load preserves history")
  check(clipboard_intact(),"failed load preserves clipboard")
+ check(waveform_intact(),"failed load preserves waveform")
 
  check(load_song(),"partial load starts")
  local first_length=emit_saved_page(0,0,false)
@@ -180,6 +193,7 @@ function _init()
        "valid load restores metadata and clean state")
  check(undo_owner==nil,"successful load clears history")
  check(clipboard_intact(),"successful load preserves clipboard")
+ check(waveform_intact(),"successful load restores waveform")
 
  if failures==0 then printh("pocket tracker project io: passed")
  else printh("pocket tracker project io: failed "..failures) end

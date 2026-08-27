@@ -100,10 +100,13 @@ masked accessors. SFX 0..7 may instead be waveform instruments in PICO-8
 0.2.6+: their first 64 bytes are signed 8-bit samples and their metadata bytes
 have waveform-specific meanings, including bass and mode bits.
 
-The project validator classifies a slot before a typed editor opens it. If the
-cartridge does not yet have the correct semantic UI, it offers read-only raw
-inspection and byte-preserving copy/export instead of decoding the bytes as
-notes.
+The project validator classifies a slot before a typed editor opens it.
+Classified waveform slots expose the first 64 bytes as 32 even/odd raw-hex
+pairs. A scalar commit owns exactly one signed 8-bit sample byte and uses the
+same byte-span history and stop/restore/restart transaction as conventional
+edits. The four waveform metadata bytes remain raw and read-only. Import,
+save/load, JSON, and authored/materialized `.p8` codecs preserve the complete
+68-byte slot without decoding samples as notes.
 
 ## 4. Project envelope
 
@@ -201,7 +204,7 @@ the same CRC variant so there is only one checksum semantic in the system.
 HOME
  ├─ SONG   pattern list -> four channel cells -> pattern flags
  ├─ SFX    slot list -> 32-row tracker -> SFX metadata/filter panel
- ├─ WAVE   waveform samples and bass/mode (M3; read-only raw view earlier)
+ ├─ WAVE   waveform sample pairs through SFX; bass/mode remains raw/read-only
  ├─ FILE   seed/new, save, load, import, export, revisions
  ├─ MIX    playback start, mute/solo, profile, follow
  └─ HELP   context controls and field legend

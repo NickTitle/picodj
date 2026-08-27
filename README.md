@@ -102,7 +102,15 @@ they do not synthesize or edit authoritative audio.
 The SFX filter panel exposes NOIZ, BUZZ, and the two levels of DETUNE,
 REVERB, and DAMPEN. Its byte codec is derived from the checksummed native
 PICO-8 0.2.7 fixture documented in `docs/PICO8_027_FILTER_FIXTURE.md`;
-waveform slots and fixture-unsupported raw states remain visibly read-only.
+fixture-unsupported filter states remain visibly read-only.
+
+Classified waveform SFX 0–7 expose their 64 signed sample bytes as 32 raw-hex
+pairs. Up/Down selects a pair, Left/Right selects its even or odd byte, and O
+opens the same wrapping scalar editor used elsewhere. The footer names the
+exact sample index and signed amplitude. Waveform metadata stays raw/read-only,
+and direct waveform preview remains unavailable; a conventional note that
+references the waveform is the audible path. The native 0.2.7 fixture and
+checksum are documented in `docs/PICO8_027_WAVEFORM_FIXTURE.md`.
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
 plus a calibrated 1,639-token probe. Its pass marker gates the shipped cart at

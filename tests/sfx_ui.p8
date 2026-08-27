@@ -86,6 +86,12 @@ function _init()
  ck(sfx_rows_begin(2) and sfx_rows_apply() and
   (raw(62,30)&0xffff)==0x8001 and
   (raw(62,31)&0xffff)==0x70c2,"row paste ui")
+ setup() sfx_number=0 sfx_row=0
+ poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
+ poke(bank_sfx_addr(0,0),0x7f) bank_project_init()
+ ck(sfx_begin_edit() and edit_width==1 and edit_value==0x7f,"wave sample begin")
+ edit_value=0x80 ck(edit_commit() and peek(bank_sfx_addr(0,0))==0x80,
+  "wave sample commit")
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end
  extcmd("shutdown")

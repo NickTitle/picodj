@@ -28,6 +28,8 @@ function _init()
  song_channel=2 song_scroll=0 app_view="song" sfx_number=1 sfx_row=0
  play_follow=true transport_tick=0 song_error=nil sfx_error=nil
  song_mix,song_mix_channel,song_mix_stage,song_active=0,0,0,"a----"
+ poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
+ poke(bank_sfx_addr(0,0),0x7f)
  local authored=snap(bank_sfx_addr(1,0),bank_sfx_size*4)
  local scratch=snap(bank_sfx_addr(63,0),bank_sfx_size)
  ck(start_song(0) and start_song(0),"idempotent play")
@@ -59,8 +61,15 @@ function _init()
   "active filter edit")
  ck(playing and bank_profile_is_active() and bank_sfx_filter(1,1)==1-filter,
   "filter stop restore edit restart")
- poke2(bank_clip_base,0x1234) sfx_clip_count=1
+ local sample_addr=bank_sfx_addr(0,0)
  local calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(sample_addr,1,0x80) end),
+  "active waveform edit")
+ ck(#music_calls==calls+2 and peek(sample_addr)==0x80 and
+  bank_revision==revision+1 and playing and bank_profile_is_active(),
+  "waveform stop restore edit restart once")
+ poke2(bank_clip_base,0x1234) sfx_clip_count=1
+ calls=#music_calls revision=bank_revision
  ck(not bank_rows(1,0,1,bank_clip_base,false),"batch preflight differs")
  ck(song_restore_then(function() return bank_rows(1,0,1,bank_clip_base,true) end),
   "active batch edit")
