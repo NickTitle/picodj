@@ -163,6 +163,7 @@ waveformEnvelope[waveformBase] = 0x00;
 waveformEnvelope[waveformBase + 1] = 0x7f;
 waveformEnvelope[waveformBase + 62] = 0x80;
 waveformEnvelope[waveformBase + 63] = 0xff;
+waveformEnvelope[waveformBase + 65] = 0xa5;
 waveformEnvelope[waveformBase + 66] |= 0x80;
 put16(waveformEnvelope, 8, io.crc16(waveformEnvelope, 64));
 put16(waveformEnvelope, 10, 0);
@@ -174,6 +175,8 @@ for (const representation of ['authored', 'materialized']) {
   assert.deepEqual(Array.from(parsed.bank.slice(0x100, 0x144)),
     Array.from(waveformEnvelope.slice(waveformBase, waveformBase + 68)),
     `${representation} PICO-8 export preserves all waveform bytes and metadata`);
+  assert.equal(parsed.bank[0x141], 0xa5,
+    `${representation} PICO-8 export preserves bass and reserved bits`);
 }
 
 const nativeWaveform = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform.p8', 'utf8'));
@@ -184,6 +187,16 @@ assert.equal(nativeWaveform.bank[0x13f], 0xff);
 assert.equal(nativeWaveform.bank[0x142] & 0x80, 0x80);
 assert.equal(nativeWaveform.bank[0x100 + 8 * 68] | (nativeWaveform.bank[0x101 + 8 * 68] << 8),
   0x8a18, 'native fixture includes a conventional note referencing waveform zero');
+const bassOff = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform-bass-off.p8', 'utf8'));
+const bassOn = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform-bass-on.p8', 'utf8'));
+const bassDeltas = [];
+for (let i = 0; i < bassOff.bank.length; i++) {
+  if (bassOff.bank[i] !== bassOn.bank[i]) bassDeltas.push([i, bassOff.bank[i], bassOn.bank[i]]);
+}
+assert.deepEqual(bassDeltas, [[0x141, 0x10, 0x11]],
+  'native editor fixture pair proves only waveform bass bit zero');
+assert.equal(bassOff.bank[0x142] & 0x80, 0x80);
+assert.equal(bassOn.bank[0x142] & 0x80, 0x80);
 
 const malformedP8 = authored.replace(/^([0-9a-f]{8})[0-9a-f]{2}/m, '$1ff');
 assert.equal(io.parseP8Audio(malformedP8), null, 'out-of-range PICO-8 note pitch is rejected');

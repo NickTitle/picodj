@@ -68,6 +68,13 @@ function _init()
  ck(#music_calls==calls+2 and peek(sample_addr)==0x80 and
   bank_revision==revision+1 and playing and bank_profile_is_active(),
   "waveform stop restore edit restart once")
+ local bass_addr=bank_sfx_addr(0,65) local bass=peek(bass_addr)
+ calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(bass_addr,1,bass^^1) end),
+  "active waveform bass edit")
+ ck(#music_calls==calls+2 and peek(bass_addr)==(bass^^1) and
+  (peek(bass_addr)&0xfe)==(bass&0xfe) and bank_revision==revision+1 and
+  playing and bank_profile_is_active(),"bass stop restore edit restart once")
  poke2(bank_clip_base,0x1234) sfx_clip_count=1
  calls=#music_calls revision=bank_revision
  ck(not bank_rows(1,0,1,bank_clip_base,false),"batch preflight differs")

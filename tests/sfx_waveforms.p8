@@ -12,7 +12,7 @@ function native_sfx() end
 function ck(ok,label) if not ok then fails+=1 printh("fail: "..label) end end
 function sample(index) return peek(bank_sfx_addr(0,index)) end
 function setup()
- reload(bank_audio_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform.p8")
+ reload(bank_audio_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform-bass-off.p8")
  bank_project_init()
  playing=false audition_active=false song_pattern=0 song_play_pattern=0
  song_channel=0 song_mix=0 song_mix_channel=0 song_active="a----"
@@ -22,6 +22,17 @@ function setup()
 end
 function _init()
  setup()
+ reload(bank_stage_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform-bass-on.p8")
+ local changes=0
+ for i=0,bank_size-1 do
+  local delta=peek(bank_audio_base+i)^^peek(bank_stage_base+i)
+  if delta!=0 then
+   changes+=1
+   ck(i==0x100+65 and delta==1,"fixture owns bass bit only")
+  end
+ end
+ ck(changes==1 and (bank_checksum(bank_stage_base)&0xffff)==0x6e12,
+  "native bass fixture pair")
  ck(bank_sfx_is_waveform(0),"fixture classification")
  ck(sample(0)==0 and sample(1)==0x7f and sample(62)==0x80 and sample(63)==0xff,
   "fixture boundary samples")
@@ -31,6 +42,41 @@ function _init()
  local fixture_crc=bank_checksum(bank_audio_base)
  ck((fixture_crc&0xffff)==0x20da,"fixture checksum")
 
+ -- Bass owns metadata byte 1 bit 0 and shares scalar dirty/history semantics.
+ local slot={} for i=0,67 do slot[i+1]=peek(bank_sfx_addr(0,i)) end
+ sfx_mode="meta" sfx_meta_field=1
+ ck(sfx_begin_edit() and edit_label=="bass" and edit_value==0 and edit_max==1,
+  "bass begin off")
+ edit_value=1
+ ck(edit_commit() and bank_sfx_meta_raw(0,1)==0x11 and bank_dirty and
+  bank_revision==1,"bass on commit")
+ for i=0,67 do
+  ck(peek(bank_sfx_addr(0,i))==(i==65 and (slot[i+1]|1) or slot[i+1]),
+   "bass owns byte "..i)
+ end
+ local rev=bank_revision
+ ck(edit_undo("sfx") and bank_sfx_meta_raw(0,1)==0x10 and not bank_dirty and
+  bank_revision==rev+1,"bass undo exact clean")
+ rev=bank_revision
+ ck(edit_undo("sfx") and bank_sfx_meta_raw(0,1)==0x11 and bank_dirty and
+  bank_revision==rev+1,"bass redo exact dirty")
+ local owner,width,addr=undo_owner,undo_width,undo_addr
+ rev=bank_revision local dirty=bank_dirty
+ ck(sfx_begin_edit(),"bass cancel begin") edit_value=0 edit_cancel()
+ ck(bank_sfx_meta_raw(0,1)==0x11 and bank_revision==rev and bank_dirty==dirty and
+  undo_owner==owner and undo_width==width and undo_addr==addr,"bass cancel exact")
+ ck(sfx_begin_edit() and edit_commit(),"bass no-op commit")
+ ck(bank_revision==rev and bank_dirty==dirty and undo_owner==owner and
+  undo_width==width and undo_addr==addr,"bass no-op exact")
+ ck(sfx_begin_edit(),"bass loss begin")
+ poke(bank_sfx_addr(0,66),bank_sfx_meta_raw(0,2)&0x7f)
+ update_sfx_screen()
+ ck(edit_owner==nil and sfx_error=="waveform unavailable" and
+  bank_sfx_meta_raw(0,1)==0x11 and bank_revision==rev and bank_dirty==dirty and
+  undo_owner==owner and undo_width==width and undo_addr==addr,"bass loss rejects")
+ poke(bank_sfx_addr(0,66),slot[67])
+ setup()
+
  -- First/last samples, raw wrap, unrelated bytes, and whole-byte history.
  local before={} for i=0,67 do before[i+1]=peek(bank_sfx_addr(0,i)) end
  ck(sfx_begin_edit() and edit_width==1 and edit_value==0,"first begin")
@@ -38,7 +84,7 @@ function _init()
  ck(edit_commit() and sample(0)==0xff and bank_dirty and bank_revision==1,
   "first wraps left")
  for i=1,67 do ck(peek(bank_sfx_addr(0,i))==before[i+1],"first owns byte "..i) end
- local rev=bank_revision
+ rev=bank_revision
  ck(edit_undo("sfx") and sample(0)==0 and not bank_dirty and bank_revision==rev+1,
   "first undo exact clean")
  rev=bank_revision
@@ -52,7 +98,7 @@ function _init()
 
  -- Cancel and no-op preserve prior history, bytes, dirty state, and revision.
  sfx_row=0 sfx_field=2
- local owner,width,addr=undo_owner,undo_width,undo_addr
+ owner,width,addr=undo_owner,undo_width,undo_addr
  rev=bank_revision local dirty=bank_dirty local raw=sample(1)
  ck(sfx_begin_edit(),"cancel begin") edit_value=raw^^1 edit_cancel()
  ck(sample(1)==raw and bank_revision==rev and bank_dirty==dirty and
@@ -61,9 +107,9 @@ function _init()
  ck(sample(1)==raw and bank_revision==rev and bank_dirty==dirty and
   undo_owner==owner and undo_width==width and undo_addr==addr,"no-op exact")
 
- -- Metadata/range/preview remain read-only while scalar editing is available.
- sfx_mode="meta" sfx_meta_field=1
- ck(not sfx_begin_edit() and sfx_error=="waveform meta read only","metadata reject")
+ -- Other metadata/range/preview remain read-only while bass is available.
+ sfx_mode="filters" sfx_filter_field=1
+ ck(not sfx_begin_edit() and sfx_error=="waveform filters read only","filter reject")
  sfx_mode="rows" sfx_error=nil
  ck(not sfx_rows_begin(1) and not sfx_toggle_rest(),"range reject")
  ck(not start_audition() and sfx_error=="preview unavailable","preview reject")
@@ -79,6 +125,17 @@ function _init()
   "playing edit restarts once")
  ck(bank_revision==1 and bank_checksum(bank_audio_base)!=fixture_crc,
   "playing edit touches once")
+ stop_song()
+
+ setup() song_play_pattern=0 sfx_mode="meta"
+ ck(start_song(0),"bass song starts")
+ calls=#music_calls
+ ck(sfx_begin_edit(),"playing bass begin") edit_value=1
+ ck(edit_commit() and #music_calls==calls+2 and music_calls[#music_calls-1][1]==-1 and
+  music_calls[#music_calls][1]==0 and playing and bank_profile_is_active(),
+  "playing bass restarts once")
+ ck(bank_sfx_meta_raw(0,1)==0x11 and bank_revision==1,
+  "playing bass touches once")
  stop_song()
 
  if fails==0 then printh("pocket tracker sfx waveforms: passed")

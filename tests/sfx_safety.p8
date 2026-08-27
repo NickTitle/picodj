@@ -29,7 +29,9 @@ function _init()
  edit_value=(edit_value+1)%256 edit_cancel()
  ck(peek(bank_sfx_addr(0,0))==bytes[1],"wave cancel exact")
  sfx_error=nil sfx_mode="meta" sfx_meta_field=2
- ck(not sfx_begin_edit() and sfx_error!=nil,"wave meta reject")
+ ck(sfx_begin_edit() and edit_label=="bass" and edit_value==
+  (bank_sfx_meta_raw(0,1)&1),"wave bass allowed")
+ edit_cancel()
  sfx_error=nil sfx_mode="filters" sfx_filter_field=1
  ck(not sfx_begin_edit() and sfx_error!=nil,"wave filter reject")
  sfx_error=nil

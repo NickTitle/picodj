@@ -68,9 +68,10 @@ selected SONG pattern/channel and SFX number on return.
 - **Default now:** classified native waveform slots expose all 64 signed sample
   bytes as 32 raw-hex pairs. Up/Down selects a pair, Left/Right selects its
   even/odd byte, and the existing wrapping scalar editor commits one exact byte
-  through atomic Undo/Redo. Raw waveform metadata remains inspectable and
-  read-only. Invalid, cancel, and no-op actions preserve history and transport.
-- **Revisit:** waveform mode conversion, metadata/bass editing, range
+  through atomic Undo/Redo. Metadata remains raw and inspectable; the native
+  bass toggle is one masked off/on edit that preserves all other bits. Invalid,
+  cancel, no-op, and waveform-loss actions preserve history and transport.
+- **Revisit:** waveform mode conversion, other metadata semantics, range
   copy/paste/clear, and direct preview require separate ownership and audition
   designs; never reinterpret sample bytes as packed note words.
 

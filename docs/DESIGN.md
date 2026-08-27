@@ -104,9 +104,11 @@ The project validator classifies a slot before a typed editor opens it.
 Classified waveform slots expose the first 64 bytes as 32 even/odd raw-hex
 pairs. A scalar commit owns exactly one signed 8-bit sample byte and uses the
 same byte-span history and stop/restore/restart transaction as conventional
-edits. The four waveform metadata bytes remain raw and read-only. Import,
-save/load, JSON, and authored/materialized `.p8` codecs preserve the complete
-68-byte slot without decoding samples as notes.
+edits. Metadata keeps all four bytes visible; the native fixture-proven bass
+field owns only bit 0 of byte 65 and preserves every other metadata bit.
+Waveform mode and remaining metadata stay read-only. Import, save/load, JSON,
+and authored/materialized `.p8` codecs preserve the complete 68-byte slot
+without decoding samples as notes.
 
 ## 4. Project envelope
 
@@ -204,7 +206,7 @@ the same CRC variant so there is only one checksum semantic in the system.
 HOME
  ├─ SONG   pattern list -> four channel cells -> pattern flags
  ├─ SFX    slot list -> 32-row tracker -> SFX metadata/filter panel
- ├─ WAVE   waveform sample pairs through SFX; bass/mode remains raw/read-only
+ ├─ WAVE   waveform sample pairs through SFX; masked bass edit; mode raw/read-only
  ├─ FILE   seed/new, save, load, import, export, revisions
  ├─ MIX    playback start, mute/solo, profile, follow
  └─ HELP   context controls and field legend
