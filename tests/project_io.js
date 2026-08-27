@@ -37,6 +37,7 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync('mobile.js', 'utf8'), sandbox);
 const io = sandbox.PocketTrackerProjectIO;
+const files = sandbox.PocketTrackerFileIO;
 const pumpProjectBridge = raf[0];
 const projectSource = fs.readFileSync('project_io.lua', 'utf8');
 const songSource = fs.readFileSync('song_ui.lua', 'utf8');
@@ -52,7 +53,10 @@ assert.doesNotMatch(mobileSource, /renderWav|readProject|pocket-tracker-song/,
 assert.match(indexSource, /Export Pocket Tracker JSON/);
 assert.match(indexSource, /Export \.p8 — authored \+ profile/);
 assert.match(indexSource, /Export \.p8 — materialized playback/);
-assert.match(indexSource, /Import Pocket Tracker JSON/);
+assert.match(indexSource, /Import JSON \/ authored \.p8/);
+assert.match(indexSource, /accept="\.json,\.p8,application\/json"/);
+assert.match(mobileSource, /Imported authored \.p8\. Choose Load in the tracker\./);
+assert.match(mobileSource, /no lossless profile header/);
 
 function put16(bytes, offset, value) {
   bytes[offset] = value & 255;
@@ -112,6 +116,13 @@ assert.equal(io.envelopeValid(wrongSelection), false,
 assert.equal(io.storeLastKnownGood(wrongSelection), false);
 assert.equal(localStorage.getItem(io.key), stableRecord,
   'unknown source selection preserves last known good');
+
+const gpioBeforeP8Import = gpio.slice();
+assert.equal(files.importProjectP8(io.p8Audio(envelope, 'authored')), true);
+assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope),
+  'authored PICO-8 import prepares the exact envelope for staged Load');
+assert.deepEqual(gpio, gpioBeforeP8Import,
+  'authored PICO-8 import leaves live GPIO untouched until staged Load');
 
 io.writeFrame(gpio, io.commands.loadRequest, 1, 0, 0, envelope.length);
 assert.equal(gpio[14] | (gpio[15] << 8), 0x4bca, 'GPIO CRC matches cartridge vector');
@@ -174,6 +185,8 @@ while (gpio[5] === io.commands.loadPage) {
 assert.equal(loadPages, 42);
 assert.equal(io.frameValid(gpio, io.commands.loadCommit), true);
 assert.deepEqual(Array.from(loaded), Array.from(envelope));
+assert.equal(io.p8Audio(loaded, 'authored'), io.p8Audio(envelope, 'authored'),
+  'staged Load followed by authored export reproduces the exact project');
 
 io.writeFrame(gpio, io.commands.savePage, 11, 0, 0, envelope.length,
   envelope.slice(0, 112), 5);

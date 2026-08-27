@@ -39,6 +39,12 @@ profile, and source selection in a fixed checksummed v2 envelope. Legacy JSON
 and WAV actions remain disabled; the old 78-byte sketch format is never used by
 save or load.
 
+The browser can re-import its own authored `.p8` only when one complete music
+section, one complete SFX section, and the exact checksummed PTP2 sidecar are
+present. Headerless generic/materialized carts remain rejected; an explicit
+profile-none contract and native fixed-slot data-cart persistence are still
+separate decisions.
+
 ## Legacy sketch
 
 Nick chose the native-first design on 2026-08-23. The four-channel,

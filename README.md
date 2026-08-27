@@ -68,12 +68,16 @@ last-known-good project slot. Save in the tracker first, then choose one of:
   profile applied only to conventional rows in exported SFX 1–4. Classified
   waveform slots keep all 64 samples and all four metadata bytes exact.
 
-JSON import validates every field, range, checksum, and exact key set before it
-atomically replaces the durable browser slot. It never writes live cartridge
-RAM; choose **Load** in the tracker to use the existing staged, checksum-gated
-commit path. Invalid files and storage faults preserve both live and durable
-state. Bridge frames, undo, snapshots, and temporary playback bytes are never
-serialized.
+JSON import validates every field, range, checksum, and exact key set. The same
+Files action re-imports Pocket Tracker **authored + profile** `.p8` exports only:
+it requires complete unique audio sections and the exact lossless sidecar, then
+validates the reconstructed envelope without repairing it. Headerless generic
+and materialized `.p8` files are rejected rather than assigned a profile.
+Successful imports atomically replace the durable browser slot after read-back
+and never write live cartridge RAM; choose **Load** in the tracker to use the
+existing staged, checksum-gated commit path. Invalid files and storage faults
+preserve both live and durable state. Bridge frames, undo, snapshots, and
+temporary playback bytes are never serialized.
 
 ## Build and test
 

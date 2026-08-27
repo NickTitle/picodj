@@ -148,11 +148,12 @@ JSON formatting, remain authoritative.
 
 M1.4B keeps the production Lua graph unchanged to preserve the verified
 256-token reserve. The browser Files panel encodes and decodes only this valid
-last-known-good envelope. A valid JSON import atomically replaces the durable
-slot after full validation and storage read-back; the existing 42-page Load
-transaction remains the only path that can stage and commit imported bytes to
-the live bank. This separation gives malformed files no live or durable write
-path and keeps browser code out of arbitrary cartridge RAM.
+last-known-good envelope. Valid JSON or sidecar-authenticated authored `.p8`
+import atomically replaces the durable slot after full validation and storage
+read-back; the existing 42-page Load transaction remains the only path that can
+stage and commit imported bytes to the live bank. This separation gives
+malformed files no live or durable write path and keeps browser code out of
+arbitrary cartridge RAM.
 
 ## 5. Editing transactions
 
@@ -351,17 +352,23 @@ All note edits, profiles, playback, dirty state, and confirmation live in Lua.
 
 ### `.p8` import
 
-The browser codec locates exact `__music__` and `__sfx__` section boundaries,
+The browser codec locates `__music__` and `__sfx__` section boundaries,
 validates hexadecimal line lengths/counts, decodes field-aware SFX rows and
-pattern flags, and produces a raw 4,608-byte bank. Missing trailing rows are
-zero-filled exactly as PICO-8 would; malformed non-hex content is rejected.
+pattern flags, and produces a raw 4,608-byte bank. The general decoder keeps
+PICO-8-compatible omitted-row defaults for fixture and export verification.
+The user-facing import boundary is stricter: it requires exactly one complete
+64-line section of each kind and exactly one well-formed 64-byte
+`-- pocket-tracker-header:` sidecar. It combines that untouched sidecar with
+the decoded bank and accepts only an already-valid PTP2 envelope with the fixed
+Track-1 profile/source selection and matching bank/envelope checksums.
 
 Native import uses `reload(staging, 0x3100, 0x1200, filename)` from a fixed data
 cart and then the same in-cart bank validator.
 
-M1.4B exposes JSON import in the browser Files panel. The `.p8` decoder is
-retained as a deterministic export verifier; user-facing `.p8` import remains a
-later native/data-cart sub-arc rather than bypassing staged project commit.
+The browser Files panel exposes JSON plus lossless re-import of Pocket Tracker
+authored `.p8` exports. Headerless generic and materialized exports reject with
+`no lossless profile header`; the browser never invents Track-1 semantics.
+Native fixed-slot data-cart import remains a separate persistence arc.
 
 ### `.p8` export
 
@@ -371,8 +378,8 @@ Song flag bits are converted back into the two-digit prefix and muted channel
 bytes; SFX note words are converted into five-digit field order, not dumped as
 little-endian words.
 
-The lossless Pocket Tracker JSON is the round-trip authority because it also
-retains project metadata and playback profile.
+Lossless Pocket Tracker JSON and authored `.p8` carry the same authoritative
+envelope metadata and playback profile; materialized `.p8` remains export-only.
 
 ## 11. Verification strategy
 

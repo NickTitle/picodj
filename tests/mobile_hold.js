@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync('mobile.js', 'utf8');
 const frameListeners = new Map();
 const cartListeners = new Map();
+const outerListeners = new Map();
 const appended = [];
 let installedStyle = null;
 
@@ -21,10 +22,22 @@ const cart = {
   contentWindow: {},
   addEventListener(type, listener) { cartListeners.set(type, listener); },
 };
+const fileStatus = {textContent: '', style: {}};
+const projectImport = {
+  files: [], value: '',
+  addEventListener(type, listener) { outerListeners.set(`project-import:${type}`, listener); },
+};
+const control = {
+  hidden: true,
+  addEventListener() {},
+  setAttribute() {},
+};
 const document = {
   querySelector(selector) {
     if (selector === '#cart') return cart;
-    return {addEventListener() {}};
+    if (selector === '#project-import') return projectImport;
+    if (selector === '#file-status') return fileStatus;
+    return control;
   },
   createElement() { throw new Error('outer document must remain untouched'); },
 };
@@ -33,6 +46,7 @@ vm.runInNewContext(source, {
   Blob,
   URL,
   document,
+  localStorage: {getItem() { return null; }, setItem() {}, removeItem() {}},
   requestAnimationFrame() {},
   setTimeout() {},
 });
@@ -64,4 +78,14 @@ assert.equal(frameListeners.has('keydown'), false);
 assert.equal(frameListeners.has('touchstart'), false);
 cartListeners.get('load')();
 assert.equal(appended.length, 1, 'installation is idempotent');
-console.log('pocket tracker mobile hold: passed');
+const importChange = outerListeners.get('project-import:change');
+assert.equal(typeof importChange, 'function');
+projectImport.files = [{name: 'headerless.P8', text: async () => '__sfx__\n__music__\n'}];
+Promise.resolve(importChange()).then(() => {
+  assert.match(fileStatus.textContent, /no lossless profile header/);
+  assert.equal(fileStatus.style.color, '#ff8a8a');
+  console.log('pocket tracker mobile hold: passed');
+}).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

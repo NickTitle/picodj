@@ -134,8 +134,103 @@ assert.deepEqual(Array.from(authoredParsed.bank), Array.from(envelope.slice(64))
   'authored PICO-8 audio sections round-trip byte-exactly');
 assert.deepEqual(Array.from(authoredParsed.header), Array.from(envelope.slice(0, 64)),
   'authored PICO-8 export carries the metadata and playback-profile header');
-
 const materialized = io.p8Audio(envelope, 'materialized');
+
+const gpioBeforeP8Import = gpio.slice();
+assert.equal(files.importProjectP8(authored), true);
+assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope),
+  'authored PICO-8 import stores the exact validated envelope');
+assert.deepEqual(gpio, gpioBeforeP8Import, 'authored PICO-8 import never mutates live GPIO');
+const authoredBlocks = authored.split('\n');
+const sfxStart = authoredBlocks.indexOf('__sfx__');
+const musicStart = authoredBlocks.indexOf('__music__');
+const reordered = [...authoredBlocks.slice(0, sfxStart),
+  ...authoredBlocks.slice(musicStart, musicStart + 65),
+  ...authoredBlocks.slice(sfxStart, musicStart), ''].join('\n');
+assert.equal(files.importProjectP8(reordered), true, 'authored sections may appear in either order');
+assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope),
+  'reordered authored sections reconstruct the exact envelope');
+for (let pass = 0; pass < 3; pass++) {
+  const cycle = io.p8Audio(io.loadLastKnownGood(), 'authored');
+  assert.equal(files.importProjectP8(cycle), true, `authored PICO-8 cycle ${pass + 1}`);
+  assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope),
+    `authored PICO-8 cycle ${pass + 1} remains byte-exact`);
+}
+
+const p8Stable = localStorage.getItem(io.key);
+const rejectP8 = (raw, result, label) => {
+  const gpioBefore = gpio.slice();
+  assert.equal(files.importProjectP8(raw), result, label);
+  assert.equal(localStorage.getItem(io.key), p8Stable, `${label} preserves durable slot`);
+  assert.deepEqual(gpio, gpioBefore, `${label} preserves live GPIO`);
+};
+const withHeader = (bytes, raw = authored) => raw.replace(
+  /^-- pocket-tracker-header: [0-9a-f]{128}$/m,
+  `-- pocket-tracker-header: ${Buffer.from(bytes.slice(0, 64)).toString('hex')}`);
+const checksumHeader = (mutator) => {
+  const bytes = envelope.slice();
+  mutator(bytes);
+  put16(bytes, 10, 0);
+  put16(bytes, 10, io.crc16(bytes, 0, bytes.length, 10, 12));
+  return withHeader(bytes);
+};
+const authoredLines = authored.split('\n');
+const partialSection = (name) => {
+  const lines = [...authoredLines];
+  lines.splice(lines.indexOf(name) + 1, 1);
+  return lines.join('\n');
+};
+const sidecar = authored.match(/^-- pocket-tracker-header: [0-9a-f]{128}$/m)[0];
+rejectP8(materialized, null, 'materialized PICO-8 import');
+rejectP8(authored.replace(`${sidecar}\n`, ''), null, 'headerless PICO-8 import');
+rejectP8(authored.replace(sidecar, `${sidecar}\n${sidecar}`), false, 'duplicate sidecar');
+rejectP8(authored.replace(sidecar, `${sidecar.slice(0, -1)}g`), false, 'malformed sidecar');
+rejectP8(authored.replace('__sfx__', ''), false, 'missing SFX section');
+rejectP8(`${authored}\n__sfx__\n`, false, 'duplicate SFX section');
+rejectP8(authored.replace('__music__', ''), false, 'missing music section');
+rejectP8(`${authored}\n__music__\n`, false, 'duplicate music section');
+rejectP8(partialSection('__sfx__'), false, 'partial SFX section');
+rejectP8(partialSection('__music__'), false, 'partial music section');
+rejectP8(authored.replace(/^[0-9a-f]{168}$/m, (line) => `g${line.slice(1)}`), false,
+  'malformed SFX section');
+rejectP8(authored.replace(/^[0-9a-f]{2} [0-9a-f]{8}$/m, 'ff 00000000'), false,
+  'malformed music section');
+rejectP8(authored.replace(/^([0-9a-f]{8})([0-9a-f]{2})/m,
+  (_, metadata, pitch) => `${metadata}${pitch === '00' ? '01' : '00'}`), false,
+  'sidecar bank CRC mismatch');
+rejectP8(withHeader(envelope.slice().fill(0, 10, 12)), false, 'sidecar envelope CRC mismatch');
+rejectP8(checksumHeader((bytes) => { bytes[0] = 0; }), false, 'unknown envelope magic');
+rejectP8(checksumHeader((bytes) => { bytes[4] = 3; }), false, 'unknown envelope version');
+rejectP8(checksumHeader((bytes) => { bytes[6] = 0; }), false, 'wrong envelope length');
+rejectP8(checksumHeader((bytes) => { bytes[15] = 2; }), false, 'unknown profile version');
+rejectP8(checksumHeader((bytes) => { bytes[56] = 1; }), false, 'unknown source selection');
+rejectP8(checksumHeader((bytes) => { bytes[16] = 16; }), false, 'overlong project text');
+rejectP8(checksumHeader((bytes) => { bytes[8] ^= 1; }), false, 'sidecar bank checksum');
+
+const p8FaultStorage = new MemoryStorage();
+p8FaultStorage.setItem(io.key, p8Stable);
+p8FaultStorage.setItem = function() { throw new Error('quota'); };
+assert.equal(files.importProjectP8(authored, p8FaultStorage), false);
+assert.equal(p8FaultStorage.getItem(io.key), p8Stable,
+  'authored PICO-8 storage failure preserves prior durable data');
+const p8ReadBackStorage = new MemoryStorage();
+p8ReadBackStorage.setItem(io.key, p8Stable);
+const p8NormalGet = p8ReadBackStorage.getItem.bind(p8ReadBackStorage);
+let p8Writes = 0;
+p8ReadBackStorage.setItem = function(key, value) {
+  MemoryStorage.prototype.setItem.call(this, key, value);
+  p8Writes++;
+};
+p8ReadBackStorage.getItem = function(key) {
+  const value = p8NormalGet(key);
+  if (p8Writes !== 1 || value === null) return value;
+  p8Writes++;
+  return `${value.slice(0, -1)}x`;
+};
+assert.equal(files.importProjectP8(authored, p8ReadBackStorage), false);
+assert.equal(p8ReadBackStorage.getItem(io.key), p8Stable,
+  'authored PICO-8 read-back failure restores prior durable data');
+
 assert.equal(io.p8Audio(envelope, 'materialized'), materialized,
   'materialized PICO-8 encoding is deterministic');
 assert.match(materialized, /-- representation: materialized/);
