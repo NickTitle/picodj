@@ -21,6 +21,7 @@ function _init()
  playing=false audition_active=false song_pattern=0 song_play_pattern=0
  song_channel=0 song_scroll=0 app_view="song" play_follow=true
  transport_tick=0 play_tick=0 song_error=nil
+ song_mix,song_mix_channel=0,0
  original_crc=bank_checksum(bank_audio_base)
  ck(start_song(0),"native start")
 end

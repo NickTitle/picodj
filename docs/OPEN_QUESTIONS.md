@@ -17,6 +17,19 @@ SONG context palette. The context palette edits SFX/mute/flow as a staged
 full-byte transaction: O commits and X cancels. Pattern and channel navigation
 clamps at their native bounds; SFX values wrap from `3f` to `00`.
 
+## SONG audition mix
+
+- **Default now:** the SONG mix row applies a runtime-only native channel mask:
+  all channels, mute the selected channel, or solo the selected channel. It
+  defaults to all, survives transport stops and SFX-preview resume for the
+  session, and is never saved or exported. Applying while playing restarts the
+  observed native pattern at row 0. Text status reports both the selected mode
+  and active channels from `stat(46..49)`; authored pattern mute bits remain a
+  separate byte edit.
+- **Revisit:** persist mixer preferences, preserve the current row across mask
+  changes, or add a broader mixer only as a deliberately designed project/UI
+  feature.
+
 ## Native project I/O
 
 M1.4A uses one namespaced browser last-known-good slot as the safe reversible

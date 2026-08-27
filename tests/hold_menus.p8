@@ -4,7 +4,7 @@ __lua__
 #include ../tracker.lua
 
 failures=0
-song_menu_items={"sfx","mute","flow","undo","play","follow"}
+song_menu_items={"sfx","mute","flow","mix","undo","play","follow"}
 sfx_menu_items=split"preview,metadata,filters,rest,undo,prev sfx,next sfx"
 
 function check(ok,label)
@@ -20,13 +20,20 @@ function song_open_sfx() sfx_open_calls+=1 app_view="sfx" end
 function song_return_from_sfx() return_calls+=1 app_view="song" end
 function sfx_begin_edit() edit_calls+=1 end
 function sfx_toggle_rest() rest_calls+=1 end
+function song_mix_apply() mix_apply_calls+=1 end
+function song_mix_label(mode,channel)
+ return mode==0 and "all" or sub("ms",mode,mode)..(channel+1)
+end
 
 function reset_fixture(view)
  app_view=view or "song"
  context_menu,context_item,context_gate,action_gate=nil,1,false,false
  playing,play_follow=false,true
+ song_channel=1
+ song_mix,song_mix_channel,song_mix_stage=0,0,0
  save_calls,load_calls,play_calls=0,0,0
  sfx_open_calls,return_calls,edit_calls,rest_calls=0,0,0,0
+ mix_apply_calls=0
  sfx_mode="rows"
  notice=""
  undo_owner=nil undo_width=1
@@ -66,6 +73,19 @@ function _init()
  check(context_menu=="song" and context_gate,"x hold opens song menu")
  close_context_menu()
  check(app_view=="song" and action_gate,"song menu closes release gated")
+
+ -- Mix staging is transient until O applies; X discards it.
+ reset_fixture("song") open_context_menu("song") release_context_gate()
+ context_item=4
+ update_context_menu(false,false,false,false,false,true,false,false)
+ check(song_mix_stage==1 and context_label("mix")=="mix m2","mix right stages mute")
+ update_context_menu(false,false,false,true,false,false,false,false)
+ check(mix_apply_calls==0 and context_menu==nil,"mix x cancels")
+ action_gate=false open_context_menu("song") release_context_gate() context_item=4
+ update_context_menu(false,false,false,false,true,false,false,false)
+ check(song_mix_stage==2 and context_label("mix")=="mix s2","mix left stages solo")
+ update_context_menu(false,false,true,false,false,false,false,false)
+ check(mix_apply_calls==1 and context_menu==nil,"mix o applies")
 
  -- The history row names the next available direction for each owner.
  context_menu="song" undo_owner="song" undo_width=1

@@ -3,31 +3,24 @@
 hold_frames=18
 start_menu=split"play,save,load"
 
-function say(text)
- notice=text
- notice_tick=120
-end
+function say() end
 
 function reset_action_input()
- o_was_down,x_was_down=false,false
  o_hold,x_hold=0,0
- o_consumed,x_consumed,chord_consumed=false,false,false
 end
 
 function context_items()
- if context_menu=="start" then return start_menu end
- if context_menu=="song" then return song_menu_items end
- return sfx_menu_items
+ return context_menu=="start" and start_menu or
+  (context_menu=="song" and song_menu_items or sfx_menu_items)
 end
 
 function open_context_menu(kind)
  context_menu,context_item,context_gate=kind,1,true
- say(kind.." menu")
+ song_mix_stage=song_mix_channel==song_channel and song_mix or 0
 end
 
 function close_context_menu()
  context_menu=nil
- context_gate=false
  action_gate=true
  reset_action_input()
 end
@@ -39,11 +32,14 @@ function context_apply(name)
   else load_song(true) end
  elseif context_menu=="song" then
   if context_item<=3 then song_begin_edit(name)
-  elseif name=="undo" then song_undo()
+  elseif name=="mix" then song_mix_apply()
+  elseif name=="undo" then edit_undo("song")
   elseif name=="play" then toggle_song()
   else play_follow=not play_follow end
  else
-  if name=="preview" then toggle_audition(sfx_mode=="rows" and sfx_row or nil)
+  if name=="preview" then
+   if audition_active then stop_audition(true)
+   else start_audition(sfx_mode=="rows" and sfx_row or nil) end
   elseif name=="metadata" then sfx_mode="meta" sfx_meta_field=1
   elseif name=="filters" then sfx_mode="filters" sfx_filter_field=1
   elseif name=="rest" then sfx_toggle_rest()
@@ -55,52 +51,53 @@ end
 
 function update_context_menu(o_down,x_down,o_pressed,x_pressed,left_pressed,right_pressed,up_pressed,down_pressed)
  if context_gate then
-  if not o_down and not x_down then context_gate=false end
+  context_gate=o_down or x_down
   return
  end
  local items=context_items()
- if up_pressed then context_item=(context_item+#items-2)%#items+1
+ if (left_pressed or right_pressed) and items[context_item]=="mix" then
+  song_mix_stage=(song_mix_stage+(right_pressed and 1 or 2))%3
+ elseif up_pressed then context_item=(context_item+#items-2)%#items+1
  elseif down_pressed then context_item=context_item%#items+1
  elseif x_pressed then close_context_menu()
  elseif o_pressed then context_apply(items[context_item]) end
 end
 
 function update_action_buttons(o_down,x_down)
- local active=o_down or x_down or o_was_down or x_was_down
+ local active=o_down or x_down or o_hold!=0 or x_hold!=0
  local view=app_view or "song"
  if o_down and x_down then
-  if view=="sfx" and not chord_consumed then
+  if view=="sfx" and o_hold>=0 and x_hold>=0 then
    sfx_toggle_rest()
-   chord_consumed,o_consumed,x_consumed=true,true,true
+   o_hold,x_hold=-1,-1
+  elseif view=="song" then o_hold,x_hold=1,1
   end
  elseif o_down then
-  o_hold+=1
-  if o_hold>=hold_frames and not o_consumed then
-   o_consumed=true
+  if o_hold>=0 then o_hold+=1 end
+  if o_hold>=hold_frames then
+   o_hold=-1
    open_context_menu("start")
   end
  elseif x_down then
-  x_hold+=1
-  if x_hold>=hold_frames and not x_consumed then
-   x_consumed=true
+  if x_hold>=0 then x_hold+=1 end
+  if x_hold>=hold_frames then
+   x_hold=-1
    open_context_menu(view)
   end
  end
- if not o_down and o_was_down then
-  if not o_consumed then
+ if not o_down and o_hold!=0 then
+  if o_hold>0 then
    if view=="song" then song_open_sfx()
    else sfx_begin_edit() end
   end
-  o_hold,o_consumed=0,false
+  o_hold=0
  end
- if not x_down and x_was_down then
-  if not x_consumed and view=="sfx" then
+ if not x_down and x_hold!=0 then
+  if x_hold>0 and view=="sfx" then
    if sfx_mode!="rows" then sfx_mode="rows" else song_return_from_sfx() end
   end
-  x_hold,x_consumed=0,false
+  x_hold=0
  end
- if not o_down and not x_down then chord_consumed=false end
- o_was_down,x_was_down=o_down,x_down
  return active
 end
 
@@ -114,6 +111,7 @@ function context_label(name)
  if name=="play" then return playing and "stop playback" or "start playback" end
  if name=="flow" then return song_flow_names[song_channel+1] end
  if name=="follow" then return play_follow and "follow on" or "follow off" end
+ if name=="mix" then return "mix "..song_mix_label(song_mix_stage,song_channel) end
  if name=="undo" then
   if undo_owner!=(context_menu=="sfx" and "sfx" or "song") then return "undo -" end
   return undo_width<0 and "redo" or "undo"
