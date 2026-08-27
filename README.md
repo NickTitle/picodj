@@ -32,8 +32,10 @@ coverage; it is not included in the production cartridge.
   is restored byte-for-byte on stop.
 - O+X toggles the selected SFX row between a note and a rest.
 
-SONG playback uses native `music(pattern, nil, channel_mask)` and the reversible
-Track 1 playback profile. Audition mix defaults to all channels, survives
+SONG playback uses native `music(pattern, nil, channel_mask)`. Track-1 projects
+apply the reversible `+2` profile; profile-none imports play authored bytes raw
+with no snapshot or gain writes. The status always shows `+2` or `raw`.
+Audition mix defaults to all channels, survives
 stop/start and SFX-preview resume for the session, and never changes authored
 mute bits or saved/exported project data. Applying a new mix while playing
 restarts the observed pattern at row 0. SONG shows `all`, `mN`, or `sN` plus a
@@ -61,7 +63,7 @@ The browser shell's **Files** panel operates only on the checksum-verified
 last-known-good project slot. Save in the tracker first, then choose one of:
 
 - deterministic Pocket Tracker JSON containing the exact 4,608-byte authored
-  bank, project metadata, provenance, revision, and playback profile;
+  bank, project metadata, provenance, revision, and optional playback profile;
 - valid `.p8` audio in **authored + profile** mode, with the exact bank and a
   Pocket Tracker sidecar header;
 - valid `.p8` audio in **materialized playback** mode, with the Track 1 gain
@@ -69,10 +71,14 @@ last-known-good project slot. Save in the tracker first, then choose one of:
   waveform slots keep all 64 samples and all four metadata bytes exact.
 
 JSON import validates every field, range, checksum, and exact key set. The same
-Files action re-imports Pocket Tracker **authored + profile** `.p8` exports only:
-it requires complete unique audio sections and the exact lossless sidecar, then
-validates the reconstructed envelope without repairing it. Headerless generic
-and materialized `.p8` files are rejected rather than assigned a profile.
+Files action re-imports Pocket Tracker **authored + profile** `.p8` exports by
+requiring complete unique audio sections and the exact lossless sidecar, then
+validating the reconstructed envelope without repair. Headerless generic carts
+with unique 0–64-line audio sections, including materialized exports, import as
+an explicit profile-none project: no external Lua transform is inferred, and
+bounded project/provenance text is derived deterministically from the filename.
+Malformed or duplicate Pocket Tracker headers always reject rather than
+downgrading to headerless import.
 Successful imports atomically replace the durable browser slot after read-back
 and never write live cartridge RAM; choose **Load** in the tracker to use the
 existing staged, checksum-gated commit path. Invalid files and storage faults

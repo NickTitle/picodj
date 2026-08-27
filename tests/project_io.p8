@@ -131,6 +131,8 @@ function _init()
  check(not bank_dirty and notice=="browser slot saved","save read-back ack gates success")
  check(undo_owner==nil,"successful save clears history")
  check(io_get16(io_header+8)==saved_crc,"save header pins authored bank checksum")
+ check(peek(io_header+14)==1 and peek(io_header+15)==1 and
+  peek(io_header+57)==1 and peek(io_header+58)==4,"save preserves track-1 tuple")
  check(clipboard_intact(),"successful save preserves clipboard")
  check(waveform_intact(),"successful save preserves waveform")
 
@@ -169,7 +171,22 @@ function _init()
  check(bank_checksum(bank_audio_base)==mutated_crc,"out-of-order page preserves live bank")
 
  check(bank_copy(bank_stage_base,bank_snapshot_base),"profile mutation stage copy")
- poke(io_header+56,1)
+ for kind in all({0,1,2}) do
+  for version in all({0,1,2}) do
+   for start in all({0,1,2}) do
+    for count in all({0,1,4,5}) do
+     poke(io_header+14,kind) poke(io_header+15,version)
+     poke(io_header+57,start) poke(io_header+58,count)
+     refresh_saved_envelope_crc()
+     local valid=kind==0 and version==0 and start==0 and count==0 or
+      kind==1 and version==1 and start==1 and count==4
+     check(io_envelope_valid()==valid,"profile tuple "..kind..version..start..count)
+    end
+   end
+  end
+ end
+ poke(io_header+14,1) poke(io_header+15,0)
+ poke(io_header+57,1) poke(io_header+58,4)
  refresh_saved_envelope_crc()
  check(load_song(),"profile mutation load starts")
  io_load_complete=true
@@ -177,11 +194,19 @@ function _init()
  io_finish_frame()
  project_io_update()
  check(io_mode=="idle" and io_frame_valid(io_error),
-       "checksum-valid unknown source selection rejected")
+       "checksum-valid unknown profile tuple rejected")
  check(bank_checksum(bank_audio_base)==mutated_crc,
        "profile mutation preserves live bank")
- poke(io_header+56,0)
+
+ -- The valid staged load commits the complete profile-none metadata atomically.
+ poke(io_header+14,0) poke(io_header+15,0)
+ poke(io_header+56,0) poke(io_header+57,0) poke(io_header+58,0)
+ io_put16(io_header+12,41)
+ memset(io_header+16,0,16) memset(io_header+32,0,24)
+ io_put_text(16,"raw import",15) io_put_text(32,"browser p8",23)
  refresh_saved_envelope_crc()
+ io_project_name="live name" io_project_source="live source"
+ bank_profile_kind=1 song_pattern=23 undo_owner="sfx"
 
  check(load_song(),"valid load starts")
  local offset=0
@@ -201,11 +226,15 @@ function _init()
  check(io_mode=="idle" and io_frame_valid(io_done),"valid load commits")
  check(bank_checksum(bank_audio_base)==saved_crc and peek(bank_audio_base)==saved_first,
        "valid load restores exact authored bank")
- check(bank_revision==37 and not bank_dirty and not bank_snapshot_valid,
+ check(bank_revision==41 and not bank_dirty and not bank_snapshot_valid,
        "valid load restores metadata and clean state")
+ check(bank_profile_kind==0 and io_project_name=="raw import" and
+  io_project_source=="browser p8" and song_pattern==0,"profile-none metadata committed")
  check(undo_owner==nil,"successful load clears history")
  check(clipboard_intact(),"successful load preserves clipboard")
  check(waveform_intact(),"successful load restores waveform")
+ check(io_prepare_envelope() and peek(io_header+14)==0 and peek(io_header+15)==0 and
+  peek(io_header+57)==0 and peek(io_header+58)==0,"profile-none save tuple")
 
  if failures==0 then printh("pocket tracker project io: passed")
  else printh("pocket tracker project io: failed "..failures) end

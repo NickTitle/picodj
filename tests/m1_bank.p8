@@ -131,6 +131,17 @@ function _init()
  check(bank_profile_restore(),"profile second restore")
  check(bank_revision==profile_revision and not bank_dirty,"restore does not dirty project")
 
+ -- Profile-none playback performs no bank or snapshot writes.
+ check(bank_copy(bank_stage_base,bank_audio_base),"profile-none reference copy")
+ local profile_saved=peek(bank_profile_base)
+ bank_profile_kind=0
+ check(bank_profile_apply() and not bank_profile_is_active(),"profile-none apply")
+ check(bank_equal(bank_audio_base,bank_stage_base) and peek(bank_profile_base)==profile_saved,
+  "profile-none performs zero writes")
+ check(bank_profile_restore() and bank_equal(bank_audio_base,bank_stage_base),
+  "profile-none restore exact")
+ bank_profile_kind=1
+
  -- Waveform profile boundaries snapshot but never transform sample or metadata bytes.
  memcpy(bank_snapshot_base,bank_audio_base,bank_size)
  reload(bank_stage_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform.p8")

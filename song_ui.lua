@@ -262,6 +262,7 @@ function song_status()
  local text=playing and "p"..hex2(song_play_pattern).." r"..hex2(play_step-1) or
   (audition_active and "preview" or "stop "..hex2(song_pattern))
  text..=bank_dirty and " dirty" or " clean"
+ text..=bank_profile_kind<1 and " raw" or " +2"
  text..=" "..song_mix_label(song_mix,song_mix_channel).." "..song_active
  if song_error then text="! "..song_error end
  return text
