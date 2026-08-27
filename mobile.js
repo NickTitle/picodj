@@ -467,6 +467,30 @@ function importProjectJson(raw, storage = localStorage) {
   return bytes !== null && storeLastKnownGood(bytes, storage);
 }
 
+function importProjectP8(raw, storage = localStorage) {
+  if (typeof raw !== 'string') return false;
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  const sidecars = lines.filter((line) => line.startsWith('-- pocket-tracker-header:'));
+  if (sidecars.length === 0) return null;
+  if (sidecars.length !== 1 || !/^-- pocket-tracker-header: [0-9a-f]{128}$/.test(sidecars[0])) return false;
+  const complete = (name) => {
+    const starts = lines.reduce((found, line, index) => line === name ? [...found, index] : found, []);
+    if (starts.length !== 1) return false;
+    let count = 0;
+    for (let i = starts[0] + 1; i < lines.length && !/^__[a-z0-9_]+__$/.test(lines[i]); i++) {
+      if (lines[i] !== '') count++;
+    }
+    return count === 64;
+  };
+  if (!complete('__sfx__') || !complete('__music__')) return false;
+  const parsed = parseP8Audio(lines.join('\n'));
+  if (!parsed?.header) return false;
+  const bytes = new Uint8Array(projectEnvelopeSize);
+  bytes.set(parsed.header);
+  bytes.set(parsed.bank, 64);
+  return envelopeValid(bytes) && storeLastKnownGood(bytes, storage);
+}
+
 function exportStoredFile(kind, storage = localStorage) {
   const bytes = loadLastKnownGood(storage);
   if (!bytes) return false;
@@ -512,11 +536,14 @@ projectImport?.addEventListener('change', async () => {
     setFileStatus('Could not read that project file. The browser slot is unchanged.', true);
     return;
   }
-  const ok = importProjectJson(raw);
-  setFileStatus(ok ? 'Imported to the browser slot. Choose Load in the tracker to commit it.' :
+  const p8 = /\.p8$/i.test(file.name);
+  const ok = p8 ? importProjectP8(raw) : importProjectJson(raw);
+  setFileStatus(ok ? (p8 ? 'Imported authored .p8. Choose Load in the tracker.' :
+    'Imported to the browser slot. Choose Load in the tracker to commit it.') :
+    p8 && ok === null ? 'Cannot import .p8: no lossless profile header. The browser slot is unchanged.' :
     'Invalid project file. The browser slot and live project are unchanged.', !ok);
 });
 
-globalThis.PocketTrackerFileIO = Object.freeze({importProjectJson, exportStoredFile});
+globalThis.PocketTrackerFileIO = Object.freeze({importProjectJson, importProjectP8, exportStoredFile});
 
 watchProjectIO();
