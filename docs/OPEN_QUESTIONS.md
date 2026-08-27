@@ -71,9 +71,12 @@ selected SONG pattern/channel and SFX number on return.
   through atomic Undo/Redo. Metadata remains raw and inspectable; the native
   bass toggle is one masked off/on edit that preserves all other bits. Invalid,
   cancel, no-op, and waveform-loss actions preserve history and transport.
+  SFX 0–7 also expose the native notes/wave toggle as a masked edit of metadata
+  byte 66 bit 7. It reinterprets the same 64 bytes without conversion; Undo/Redo
+  and active playback use the shared authored/profile-safe transaction.
   Track-1 playback and materialized export snapshot profile-range waveforms but
   skip their volume transform, preserving every sample and metadata byte.
-- **Revisit:** waveform mode conversion, other metadata semantics, range
+- **Revisit:** other waveform metadata/filter semantics, range
   copy/paste/clear, and direct preview require separate ownership and audition
   designs; never reinterpret sample bytes as packed note words.
 

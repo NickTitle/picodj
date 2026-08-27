@@ -33,6 +33,17 @@ function _init()
  end
  ck(changes==1 and (bank_checksum(bank_stage_base)&0xffff)==0x6e12,
   "native bass fixture pair")
+ reload(bank_stage_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform-mode-notes.p8")
+ changes=0
+ for i=0,bank_size-1 do
+  local delta=peek(bank_audio_base+i)^^peek(bank_stage_base+i)
+  if delta!=0 then
+   changes+=1
+   ck(i==0x100+66 and delta==0x80,"fixture owns mode bit only")
+  end
+ end
+ ck(changes==1 and (bank_checksum(bank_stage_base)&0xffff)==0x07be,
+  "native mode fixture pair")
  ck(bank_sfx_is_waveform(0),"fixture classification")
  ck(sample(0)==0 and sample(1)==0x7f and sample(62)==0x80 and sample(63)==0xff,
   "fixture boundary samples")
@@ -75,6 +86,53 @@ function _init()
   bank_sfx_meta_raw(0,1)==0x11 and bank_revision==rev and bank_dirty==dirty and
   undo_owner==owner and undo_width==width and undo_addr==addr,"bass loss rejects")
  poke(bank_sfx_addr(0,66),slot[67])
+ setup()
+
+ -- Mode owns metadata byte 2 bit 7 without converting the shared payload.
+ local clip={} for i=0,63 do poke(bank_clip_base+i,(i*13+5)&0xff) clip[i+1]=peek(bank_clip_base+i) end
+ slot={} for i=0,67 do slot[i+1]=peek(bank_sfx_addr(0,i)) end
+ sfx_mode="meta" sfx_meta_field=2
+ ck(sfx_begin_edit() and edit_label=="mode" and edit_value==1,"wave mode begin")
+ edit_value=0
+ ck(edit_commit() and not bank_sfx_is_waveform(0) and bank_dirty and bank_revision==1,
+  "mode notes commit")
+ for i=0,67 do
+  ck(peek(bank_sfx_addr(0,i))==(i==66 and (slot[i+1]&0x7f) or slot[i+1]),
+   "mode owns byte "..i)
+ end
+ for i=0,63 do ck(peek(bank_clip_base+i)==clip[i+1],"mode clipboard "..i) end
+ rev=bank_revision
+ ck(edit_undo("sfx") and bank_sfx_is_waveform(0) and not bank_dirty and
+  bank_revision==rev+1,"mode undo exact clean")
+ rev=bank_revision
+ ck(edit_undo("sfx") and not bank_sfx_is_waveform(0) and bank_dirty and
+  bank_revision==rev+1,"mode redo exact dirty")
+ sfx_meta_field=4
+ ck(sfx_begin_edit() and edit_value==0,"notes mode begin")
+ edit_value=1
+ ck(edit_commit() and bank_sfx_is_waveform(0),"mode wave commit")
+ local owner,width,addr=undo_owner,undo_width,undo_addr
+ rev=bank_revision local dirty=bank_dirty
+ sfx_meta_field=2 ck(sfx_begin_edit(),"mode cancel begin") edit_value=0 edit_cancel()
+ ck(bank_sfx_is_waveform(0) and bank_revision==rev and bank_dirty==dirty and
+  undo_owner==owner and undo_width==width and undo_addr==addr,"mode cancel exact")
+ ck(sfx_begin_edit() and edit_commit(),"mode no-op commit")
+ ck(bank_revision==rev and bank_dirty==dirty and undo_owner==owner and
+  undo_width==width and undo_addr==addr,"mode no-op exact")
+ sfx_number=8 sfx_meta_field=4 sfx_error=nil
+ ck(not sfx_begin_edit() and sfx_error=="mode unavailable" and
+  bank_revision==rev and undo_owner==owner,"mode sfx8 reject")
+ setup()
+ for target in all({1,4,7}) do
+  memcpy(bank_sfx_addr(target,0),bank_sfx_addr(0,0),bank_sfx_size)
+  sfx_number=target sfx_mode="meta" sfx_meta_field=2
+  ck(bank_sfx_is_waveform(target) and sfx_begin_edit(),"mode boundary wave "..target)
+  edit_value=0
+  ck(edit_commit() and not bank_sfx_is_waveform(target),"mode boundary notes "..target)
+  sfx_meta_field=4
+  ck(sfx_begin_edit(),"mode boundary notes begin "..target) edit_value=1
+  ck(edit_commit() and bank_sfx_is_waveform(target),"mode boundary wave commit "..target)
+ end
  setup()
 
  -- First/last samples, raw wrap, unrelated bytes, and whole-byte history.
@@ -127,7 +185,7 @@ function _init()
   "playing edit touches once")
  stop_song()
 
- setup() song_play_pattern=0 sfx_mode="meta"
+ setup() song_play_pattern=0 sfx_mode="meta" sfx_meta_field=1
  ck(start_song(0),"bass song starts")
  calls=#music_calls
  ck(sfx_begin_edit(),"playing bass begin") edit_value=1

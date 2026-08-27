@@ -41,6 +41,7 @@ function waveform_intact()
    if peek(bank_sfx_addr(sfx,i))!=(i*29+7)&0xff then return false end
   end
   if bank_sfx_meta_raw(sfx,1)!=0xa5 then return false end
+  if (bank_sfx_meta_raw(sfx,2)&0x80)==0 then return false end
  end
  return (peek2(bank_sfx_addr(8,0))&0xffff)==0x8a58
 end

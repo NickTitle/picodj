@@ -4,7 +4,7 @@ sfx_fields,sfx_field_x,sfx_field_shift,sfx_field_mask=
  split"pitch,inst,custom,volume,effect","\16\32\40\48\56","\0\6\15\9\12","\63\7\1\7\7"
 sfx_menu_items,sfx_row_menu,sfx_meta_fields,sfx_filter_names,sfx_rest_words=
  split"preview,metadata,filters,row ops,undo,prev sfx,next sfx",
- split"rest,copy rows,paste rows,clear rows",split"speed,start/len,end",
+ split"rest,copy rows,paste rows,clear rows",split"speed,start/len,end,mode",
  split"noiz,buzz,detune,reverb,dampen",{}
 
 function sfx_keep_visible()
@@ -17,34 +17,34 @@ end
 
 function sfx_begin_edit()
  if sfx_row_op then return sfx_rows_apply() end
- if sfx_is_waveform() then
-  if sfx_mode=="meta" then
-   local addr=bank_sfx_addr(sfx_number,65)
-   return edit_begin("sfx",addr,1,@addr,0xfe,0,1,"bass")
+ local wave=sfx_is_waveform()
+ if sfx_mode!="rows" then
+  local filter=sfx_mode=="filters"
+  local index=filter and sfx_filter_field or sfx_meta_field
+  local mode=not filter and sfx_number<8 and index>(wave and 1 or 3)
+  if index>3 and not (filter or mode) then sfx_error="mode unavailable" return false end
+  local meta=filter and 0 or mode and 2 or index
+  local old=bank_sfx_meta_raw(sfx_number,meta)
+  if filter and (wave or old>0xd7) then
+   sfx_error=wave and "waveform filters read only" or "raw filter state read only" return false
   end
-  if sfx_mode!="rows" then
-   sfx_error="waveform "..sfx_mode.." read only" return false
-  end
+  local keep,shift,max=0,0,31
+  if filter then shift=-bank_filter_steps[index] max=index<3 and 1 or 2
+  elseif mode or wave then
+   keep,shift,max=mode and 0x7f or 0xfe,mode and 7 or 0,1
+  elseif index==1 then max=255 else keep=0xe0 end
+  return edit_begin("sfx",bank_sfx_addr(sfx_number,64+meta),1,old,
+   keep,shift,max,mode and "mode" or wave and "bass" or
+   (filter and sfx_filter_names or sfx_meta_fields)[index])
+ end
+ if wave then
   local addr=bank_sfx_addr(sfx_number,sfx_row*2+sfx_field-1)
   return edit_begin("sfx",addr,1,@addr,0,0,255,"sample")
  end
- if sfx_mode=="rows" then
-  local word=song_restore_then(function()
-   return bank_note_authored_raw(sfx_number,sfx_row)
-  end)
-  if not word then sfx_error="row unavailable" return false end
-  local shift,mask=ord(sfx_field_shift,sfx_field),ord(sfx_field_mask,sfx_field)
-  return edit_begin("sfx",bank_note_addr(sfx_number,sfx_row),2,word,
-   0xffff^^(mask<<shift),shift,mask,sfx_fields[sfx_field])
- end
- local filter=sfx_mode=="filters"
- local index=filter and sfx_filter_field or sfx_meta_field
- local old=bank_sfx_meta_raw(sfx_number,filter and 0 or index)
- if filter and old>0xd7 then sfx_error="raw filter state read only" return false end
- return edit_begin("sfx",bank_sfx_addr(sfx_number,64+(filter and 0 or index)),1,old,
-  filter and 0 or (index==1 and 0 or 0xe0),filter and -bank_filter_steps[index] or 0,
-  filter and (index<3 and 1 or 2) or (index==1 and 255 or 31),
-  (filter and sfx_filter_names or sfx_meta_fields)[index])
+ local word=bank_note_authored_raw(sfx_number,sfx_row)
+ local shift,mask=ord(sfx_field_shift,sfx_field),ord(sfx_field_mask,sfx_field)
+ return edit_begin("sfx",bank_note_addr(sfx_number,sfx_row),2,word,
+  0xffff^^(mask<<shift),shift,mask,sfx_fields[sfx_field])
 end
 
 function sfx_rows_begin(op)
@@ -115,7 +115,7 @@ function update_sfx_screen()
   local meta=sfx_mode=="meta"
   local field=meta and sfx_meta_field or sfx_filter_field
   field=mid(1,field+(btnp(3) and 1 or btnp(2) and -1 or 0),
-   meta and (sfx_is_waveform() and 1 or 3) or 5)
+   meta and (sfx_number<8 and (sfx_is_waveform() and 2 or 4) or 3) or 5)
   if meta then sfx_meta_field=field else sfx_filter_field=field end
  else
   local fields=sfx_is_waveform() and 2 or 5
@@ -128,16 +128,17 @@ function update_sfx_screen()
 end
 
 function draw_sfx_list(names,values,field,y,step)
- for i=1,#names do
-  print((i==field and "> " or "  ")..names[i].." "..values[i],22,
-   y+(i-1)*step,i==field and 7 or 6)
+ for i=1,#values do
+  local picked=i==field
+  print((picked and "> " or "  ")..names[i].." "..values[i],22,
+   y+(i-1)*step,picked and 7 or 6)
  end
- print("tap o edit/hold start x rows",7,106,5)
+ print("tap o edit/hold start x rows",7,106)
 end
 
 function draw_sfx_filters()
  local raw,values=bank_sfx_meta_raw(sfx_number,0),{}
- for i=1,5 do values[i]=bank_sfx_filter(sfx_number,i) or "-" end
+ for i=1,5 do add(values,bank_sfx_filter(sfx_number,i) or "-") end
  print("raw filter "..hex2(raw),30,18,5)
  draw_sfx_list(sfx_filter_names,values,sfx_filter_field,32,12)
  print(sfx_is_waveform() and "waveform filters read only" or
@@ -177,22 +178,25 @@ function draw_sfx_rows()
    (@(bank_sfx_addr(sfx_number,sample))<<24>>24),3,96,5)
  elseif sfx_row_op then
   print(sfx_row_menu[sfx_row_op+1].." "..hex2(first).."-"..hex2(last),18,96,7)
-  print("up/down  o confirm  x cancel",6,105,6)
+  print("up/down  o confirm  x cancel",6,105)
  else
   print("field "..sfx_fields[sfx_field].."  hold x menu",3,96,5)
  end
- if not sfx_row_op then print("tap o edit/hold start x song",7,105,6) end
+ if not sfx_row_op then print("tap o edit/hold start x song",7,105) end
 end
 
 function draw_sfx_meta()
- local raw={}
- for i=0,3 do raw[i+1]=bank_sfx_meta_raw(sfx_number,i) end
- print("raw m0 m1 m2 m3",15,18,5)
- print(hex2(raw[1]).." "..hex2(raw[2]).." "..hex2(raw[3]).." "..hex2(raw[4]),30,29,7)
- draw_sfx_list(sfx_is_waveform() and {"bass"} or
-  {"speed",(raw[4]&0x1f)==0 and "len" or "loop start","loop end"},
-  sfx_is_waveform() and {(raw[2]&1)!=0 and "on" or "off"} or
-  {raw[2],raw[3]&0x1f,raw[4]&0x1f},sfx_meta_field,47,13)
+ local raw,text={},""
+ for i=0,3 do
+  add(raw,bank_sfx_meta_raw(sfx_number,i)) text..=hex2(raw[#raw]).." "
+ end
+ print("raw "..text,15,24,7)
+ local wave=sfx_is_waveform()
+ local values=wave and {(raw[2]&1)!=0 and "on" or "off","wave"} or
+  {raw[2],raw[3]&0x1f,raw[4]&0x1f,sfx_number<8 and "notes"}
+ sfx_meta_field=min(sfx_meta_field,#values)
+ draw_sfx_list(wave and split"bass,mode" or sfx_meta_fields,
+  values,sfx_meta_field,47,13)
 end
 
 function draw_sfx_handoff()
