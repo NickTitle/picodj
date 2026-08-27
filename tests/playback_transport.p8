@@ -85,6 +85,16 @@ function _init()
    "playing solo restart "..ch)
   stop_song()
  end
+ song_channel=0 song_mix_stage=0 song_mix_apply()
+ start_song(12)
+ stats[57]=true stats[54]=9
+ for ch=0,3 do stats[46+ch]=ch stats[50+ch]=ch end
+ transport_tick=3 update_playhead()
+ local calls=#music_calls
+ song_mix_stage=1 song_mix_apply()
+ ck(#music_calls==calls+2 and music_calls[#music_calls][1]==9,
+  "playing mix restarts observed pattern")
+ stop_song()
  song_channel=2 song_mix_stage=2 song_mix_apply()
  start_song(9) start_audition(0) stop_audition(true)
  ck(music_calls[#music_calls][1]==9 and music_calls[#music_calls][3]==4,

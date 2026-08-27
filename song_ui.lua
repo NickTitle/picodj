@@ -95,7 +95,7 @@ function update_playhead()
  end
  if not playing or transport_tick<=2 then return end
  if not native_stat(57) then stop_song() return end
- play_pattern=native_stat(54)
+ song_play_pattern=native_stat(54)
  song_active="a"
  for channel=0,3 do
   local current=native_stat(46+channel)
@@ -108,7 +108,7 @@ function update_playhead()
   end
  end
  if play_follow then
-  song_pattern=mid(0,play_pattern,bank_pattern_count-1)
+  song_pattern=mid(0,song_play_pattern,bank_pattern_count-1)
   song_keep_visible()
  end
 end
@@ -258,7 +258,7 @@ function _init()
  song_pattern,song_channel,song_scroll=0,0,0
  edit_owner,undo_owner,song_error=nil,nil,nil
  audition_active,audition_restart=false,false
- transport_tick,play_pattern=0,0
+ transport_tick=0
  play_follow=true
  song_mix,song_mix_channel,song_mix_stage,song_active=0,0,0,"a----"
  if (bank_checksum(bank_audio_base)&0xffff)!=song_expected_crc then
@@ -273,7 +273,7 @@ function _update60()
 end
 
 function song_status()
- local text=playing and "p"..hex2(play_pattern).." r"..hex2(play_step-1) or
+ local text=playing and "p"..hex2(song_play_pattern).." r"..hex2(play_step-1) or
   (audition_active and "preview" or "stop "..hex2(song_pattern))
  text..=bank_dirty and " dirty" or " clean"
  text..=" "..song_mix_label(song_mix,song_mix_channel).." "..song_active
