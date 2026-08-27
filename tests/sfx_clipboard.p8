@@ -137,6 +137,12 @@ function _init()
   "preview resumes observed song")
  stop_song()
 
+ -- Rest memory always captures authored, never profile-boosted, words.
+ setup(1) put(1,0,0x0a18) bank_project_init()
+ ck(start_song(0) and sfx_toggle_rest() and row(1,0)==0,"playing rest clears")
+ ck(sfx_toggle_rest() and row(1,0)==0x0a18,"playing rest restores authored")
+ stop_song()
+
  if fails==0 then printh("pocket tracker sfx clipboard: passed")
  else printh("pocket tracker sfx clipboard: failed "..fails) end
  extcmd("shutdown")

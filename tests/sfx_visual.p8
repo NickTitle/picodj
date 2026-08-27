@@ -28,6 +28,12 @@ function _init()
  draw_sfx_handoff()
  extcmd("set_filename","picodj-sfx-filters-raw-m2")
  extcmd("screen")
+ sfx_number=0 sfx_mode="rows" sfx_row=31 sfx_scroll=23 sfx_field=2
+ poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
+ poke(bank_sfx_addr(0,62),0x80) poke(bank_sfx_addr(0,63),0xff)
+ draw_sfx_handoff()
+ extcmd("set_filename","picodj-sfx-waveform-m3")
+ extcmd("screen")
  printh("pocket tracker sfx visual: passed")
  extcmd("shutdown")
 end

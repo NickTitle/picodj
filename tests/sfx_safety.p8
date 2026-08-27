@@ -25,7 +25,9 @@ function _init()
  bank_project_init()
  local bytes={}
  for i=0,67 do add(bytes,peek(bank_sfx_addr(0,i))) end
- ck(not sfx_begin_edit() and sfx_error!=nil,"wave row reject")
+ ck(sfx_begin_edit() and edit_width==1 and edit_value==bytes[1],"wave row edit")
+ edit_value=(edit_value+1)%256 edit_cancel()
+ ck(peek(bank_sfx_addr(0,0))==bytes[1],"wave cancel exact")
  sfx_error=nil sfx_mode="meta" sfx_meta_field=2
  ck(not sfx_begin_edit() and sfx_error!=nil,"wave meta reject")
  sfx_error=nil sfx_mode="filters" sfx_filter_field=1

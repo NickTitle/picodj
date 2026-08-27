@@ -156,6 +156,35 @@ for (let sfx = 1; sfx <= 4; sfx++) {
   }
 }
 
+const waveformEnvelope = envelope.slice();
+const waveformBase = 64 + 0x100;
+for (let sample = 0; sample < 64; sample++) waveformEnvelope[waveformBase + sample] = (sample * 29 + 7) & 255;
+waveformEnvelope[waveformBase] = 0x00;
+waveformEnvelope[waveformBase + 1] = 0x7f;
+waveformEnvelope[waveformBase + 62] = 0x80;
+waveformEnvelope[waveformBase + 63] = 0xff;
+waveformEnvelope[waveformBase + 66] |= 0x80;
+put16(waveformEnvelope, 8, io.crc16(waveformEnvelope, 64));
+put16(waveformEnvelope, 10, 0);
+put16(waveformEnvelope, 10, io.crc16(waveformEnvelope, 0, waveformEnvelope.length, 10, 12));
+assert.deepEqual(Array.from(io.parseProjectJson(io.projectJson(waveformEnvelope))),
+  Array.from(waveformEnvelope), 'waveform samples round-trip through lossless JSON');
+for (const representation of ['authored', 'materialized']) {
+  const parsed = io.parseP8Audio(io.p8Audio(waveformEnvelope, representation));
+  assert.deepEqual(Array.from(parsed.bank.slice(0x100, 0x144)),
+    Array.from(waveformEnvelope.slice(waveformBase, waveformBase + 68)),
+    `${representation} PICO-8 export preserves all waveform bytes and metadata`);
+}
+
+const nativeWaveform = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform.p8', 'utf8'));
+assert.equal(nativeWaveform.bank[0x100], 0x00);
+assert.equal(nativeWaveform.bank[0x101], 0x7f);
+assert.equal(nativeWaveform.bank[0x13e], 0x80);
+assert.equal(nativeWaveform.bank[0x13f], 0xff);
+assert.equal(nativeWaveform.bank[0x142] & 0x80, 0x80);
+assert.equal(nativeWaveform.bank[0x100 + 8 * 68] | (nativeWaveform.bank[0x101 + 8 * 68] << 8),
+  0x8a18, 'native fixture includes a conventional note referencing waveform zero');
+
 const malformedP8 = authored.replace(/^([0-9a-f]{8})[0-9a-f]{2}/m, '$1ff');
 assert.equal(io.parseP8Audio(malformedP8), null, 'out-of-range PICO-8 note pitch is rejected');
 assert.equal(io.parseP8Audio('__sfx__\n00\n__music__\n00 00000000\n'), null,
