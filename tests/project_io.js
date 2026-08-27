@@ -83,6 +83,16 @@ const envelope = fixtureEnvelope();
 assert.equal(io.envelopeValid(envelope), true);
 assert.equal(io.storeLastKnownGood(envelope), true);
 assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope));
+const modeEnvelope = envelope.slice();
+const modeOffset = 64 + 0x100 + 68 + 66;
+modeEnvelope[modeOffset] ^= 0x80;
+put16(modeEnvelope, 8, io.crc16(modeEnvelope, 64));
+put16(modeEnvelope, 10, 0);
+put16(modeEnvelope, 10, io.crc16(modeEnvelope, 0, modeEnvelope.length, 10, 12));
+assert.equal(io.storeLastKnownGood(modeEnvelope), true);
+assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(modeEnvelope),
+  'browser slot preserves the selected waveform mode bit and all other bytes');
+assert.equal(io.storeLastKnownGood(envelope), true);
 
 const corruptRecord = JSON.parse(localStorage.getItem(io.key));
 corruptRecord.envelope = `${corruptRecord.envelope.slice(0, 200)}g0${corruptRecord.envelope.slice(202)}`;

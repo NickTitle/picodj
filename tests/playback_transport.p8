@@ -135,6 +135,21 @@ function _init()
  ck(#music_calls==calls+2 and peek(wave_bass)==(bass_old^^1) and
   bank_revision==revision+1 and bank_profile_is_active(),
   "profile waveform bass restart exact")
+ local wave_mode=bank_sfx_addr(4,66) local mode_old=peek(wave_mode)
+ calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(wave_mode,1,mode_old&0x7f) end),
+  "profile waveform notes mode edit")
+ wave[0x100+4*68+67]=mode_old&0x7f
+ ck(#music_calls==calls+2 and not bank_sfx_is_waveform(4) and
+  bank_revision==revision+1 and bank_profile_is_active(),
+  "profile notes mode restart exact")
+ calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(wave_mode,1,mode_old|0x80) end),
+  "profile waveform wave mode edit")
+ wave[0x100+4*68+67]=mode_old|0x80
+ ck(#music_calls==calls+2 and bank_sfx_is_waveform(4) and
+  bank_revision==revision+1 and bank_profile_is_active(),
+  "profile wave mode restart exact")
  stop_song()
  ck(same(bank_audio_base,wave,bank_size),"profile waveform complete restore")
  for i=0,bank_size-1 do poke(bank_audio_base+i,prior[i+1]) end

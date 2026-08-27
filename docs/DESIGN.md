@@ -105,8 +105,9 @@ Classified waveform slots expose the first 64 bytes as 32 even/odd raw-hex
 pairs. A scalar commit owns exactly one signed 8-bit sample byte and uses the
 same byte-span history and stop/restore/restart transaction as conventional
 edits. Metadata keeps all four bytes visible; the native fixture-proven bass
-field owns only bit 0 of byte 65 and preserves every other metadata bit.
-Waveform mode and remaining metadata stay read-only. Import, save/load, JSON,
+field owns only bit 0 of byte 65, while mode for SFX 0–7 owns only bit 7 of byte
+66. Switching notes/wave reinterprets the same 64 payload bytes and preserves
+every other byte and bit. Remaining waveform metadata stays read-only. Import, save/load, JSON,
 and authored/materialized `.p8` codecs preserve the complete 68-byte slot
 without decoding samples as notes.
 
@@ -206,7 +207,7 @@ the same CRC variant so there is only one checksum semantic in the system.
 HOME
  ├─ SONG   pattern list -> four channel cells -> pattern flags
  ├─ SFX    slot list -> 32-row tracker -> SFX metadata/filter panel
- ├─ WAVE   waveform sample pairs through SFX; masked bass edit; mode raw/read-only
+ ├─ WAVE   waveform sample pairs through SFX; masked bass and notes/wave edits
  ├─ FILE   seed/new, save, load, import, export, revisions
  ├─ MIX    playback start, mute/solo, profile, follow
  └─ HELP   context controls and field legend

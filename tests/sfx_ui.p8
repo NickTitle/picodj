@@ -97,6 +97,17 @@ function _init()
  ck(sfx_begin_edit() and edit_label=="bass" and edit_value==0,"wave bass begin")
  edit_value=1 ck(edit_commit() and bank_sfx_meta_raw(0,1)==0xb1,
   "wave bass preserves reserved")
+ local payload={} for i=0,67 do payload[i+1]=peek(bank_sfx_addr(0,i)) end
+ sfx_meta_field=2
+ ck(sfx_begin_edit() and edit_label=="mode" and edit_value==1,"wave mode begin")
+ edit_value=0 ck(edit_commit() and not bank_sfx_is_waveform(0),"notes mode commit")
+ for i=0,67 do ck(peek(bank_sfx_addr(0,i))==
+  (i==66 and (payload[i+1]&0x7f) or payload[i+1]),"mode byte "..i) end
+ sfx_meta_field=4
+ ck(sfx_begin_edit() and edit_label=="mode" and edit_value==0,"notes mode begin")
+ edit_value=1 ck(edit_commit() and bank_sfx_is_waveform(0),"wave mode commit")
+ sfx_number=8 sfx_meta_field=4 sfx_error=nil
+ ck(not sfx_begin_edit() and sfx_error=="mode unavailable","mode limited to sfx 0-7")
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end
  extcmd("shutdown")

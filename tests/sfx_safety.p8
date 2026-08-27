@@ -28,9 +28,12 @@ function _init()
  ck(sfx_begin_edit() and edit_width==1 and edit_value==bytes[1],"wave row edit")
  edit_value=(edit_value+1)%256 edit_cancel()
  ck(peek(bank_sfx_addr(0,0))==bytes[1],"wave cancel exact")
- sfx_error=nil sfx_mode="meta" sfx_meta_field=2
+ sfx_error=nil sfx_mode="meta" sfx_meta_field=1
  ck(sfx_begin_edit() and edit_label=="bass" and edit_value==
   (bank_sfx_meta_raw(0,1)&1),"wave bass allowed")
+ edit_cancel()
+ sfx_meta_field=2
+ ck(sfx_begin_edit() and edit_label=="mode" and edit_value==1,"wave mode allowed")
  edit_cancel()
  sfx_error=nil sfx_mode="filters" sfx_filter_field=1
  ck(not sfx_begin_edit() and sfx_error!=nil,"wave filter reject")
@@ -40,6 +43,9 @@ function _init()
   ck(peek(bank_sfx_addr(0,i))==bytes[i+1],"wave byte "..i)
  end
  ck(not bank_dirty and bank_revision==0,"wave bytes exact clean")
+ setup(8) sfx_mode="meta" sfx_meta_field=4
+ ck(not sfx_begin_edit() and sfx_error=="mode unavailable" and
+  not bank_dirty and bank_revision==0,"mode sfx8 exact reject")
  setup(63)
  sfx_clip_count=0
  ck(not sfx_rows_begin(2) and sfx_error=="clipboard empty","empty paste reject")

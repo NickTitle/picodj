@@ -19,6 +19,10 @@ function _init()
  draw_sfx_handoff()
  extcmd("set_filename","picodj-sfx-meta-m13")
  extcmd("screen")
+ sfx_number=0 sfx_meta_field=4
+ draw_sfx_handoff()
+ extcmd("set_filename","picodj-sfx-mode-notes-m3")
+ extcmd("screen")
  sfx_number=63 sfx_mode="filters" sfx_filter_field=3
  poke(bank_sfx_addr(63,64),0xd7)
  draw_sfx_handoff()
@@ -34,10 +38,10 @@ function _init()
  draw_sfx_handoff()
  extcmd("set_filename","picodj-sfx-waveform-m3")
  extcmd("screen")
- sfx_mode="meta" sfx_meta_field=1
+ sfx_mode="meta" sfx_meta_field=2
  poke(bank_sfx_addr(0,65),0x11)
  draw_sfx_handoff()
- extcmd("set_filename","picodj-sfx-waveform-bass-m3")
+ extcmd("set_filename","picodj-sfx-waveform-mode-m3")
  extcmd("screen")
  printh("pocket tracker sfx visual: passed")
  extcmd("shutdown")

@@ -211,6 +211,29 @@ assert.deepEqual(Array.from(waveformMaterialized), Array.from(expectedWaveformMa
 assert.equal(waveformMaterialized[0x100 + 8 * 68] |
   (waveformMaterialized[0x101 + 8 * 68] << 8), 0x8a58,
   'materialization preserves the custom waveform reference');
+const notesEnvelope = waveformEnvelope.slice();
+const notesBase = 64 + 0x100 + 68;
+notesEnvelope[notesBase + 66] &= 0x7f;
+put16(notesEnvelope, 8, io.crc16(notesEnvelope, 64));
+put16(notesEnvelope, 10, 0);
+put16(notesEnvelope, 10, io.crc16(notesEnvelope, 0, notesEnvelope.length, 10, 12));
+assert.deepEqual(Array.from(io.parseProjectJson(io.projectJson(notesEnvelope))),
+  Array.from(notesEnvelope), 'notes mode round-trips through lossless JSON');
+const notesAuthored = io.parseP8Audio(io.p8Audio(notesEnvelope, 'authored')).bank;
+assert.deepEqual(Array.from(notesAuthored.slice(0x100 + 68, 0x100 + 2 * 68)),
+  Array.from(notesEnvelope.slice(notesBase, notesBase + 68)),
+  'authored PICO-8 export preserves all 68 notes-mode bytes');
+const notesMaterialized = io.parseP8Audio(io.p8Audio(notesEnvelope, 'materialized')).bank;
+assert.equal(notesMaterialized[0x100 + 68 + 66], notesEnvelope[notesBase + 66],
+  'materialized export preserves the selected notes mode bit');
+for (let row = 0; row < 32; row++) {
+  const offset = 0x100 + 68 + row * 2;
+  const source = notesEnvelope[64 + offset] | (notesEnvelope[65 + offset] << 8);
+  const volume = (source >> 9) & 7;
+  const expected = volume === 0 ? source : (source & 0xf1ff) | (Math.min(7, volume + 2) << 9);
+  assert.equal(notesMaterialized[offset] | (notesMaterialized[offset + 1] << 8), expected,
+    `notes-mode materialization retains conventional gain row ${row}`);
+}
 const futureWaveform = waveformEnvelope.slice();
 futureWaveform[4] = 3;
 const rejectedFuture = futureWaveform.slice();
@@ -235,6 +258,17 @@ assert.deepEqual(bassDeltas, [[0x141, 0x10, 0x11]],
   'native editor fixture pair proves only waveform bass bit zero');
 assert.equal(bassOff.bank[0x142] & 0x80, 0x80);
 assert.equal(bassOn.bank[0x142] & 0x80, 0x80);
+const modeNotes = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform-mode-notes.p8', 'utf8'));
+const modeWave = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform-mode-wave.p8', 'utf8'));
+const modeDeltas = [];
+for (let i = 0; i < modeNotes.bank.length; i++) {
+  if (modeNotes.bank[i] !== modeWave.bank[i]) modeDeltas.push([i, modeNotes.bank[i], modeWave.bank[i]]);
+}
+assert.deepEqual(modeDeltas, [[0x142, 0x00, 0x80]],
+  'native editor fixture pair proves only waveform mode bit seven');
+assert.deepEqual(Array.from(modeNotes.bank.slice(0x100, 0x140)),
+  Array.from(modeWave.bank.slice(0x100, 0x140)), 'mode fixture keeps all 64 payload bytes exact');
+assert.equal(modeNotes.bank[0x141], modeWave.bank[0x141]);
 
 const malformedP8 = authored.replace(/^([0-9a-f]{8})[0-9a-f]{2}/m, '$1ff');
 assert.equal(io.parseP8Audio(malformedP8), null, 'out-of-range PICO-8 note pitch is rejected');
