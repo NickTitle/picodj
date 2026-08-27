@@ -215,17 +215,15 @@ end
 
 function bank_profile_apply()
  if bank_profile_active then return true end
- for sfx=1,4 do
-  if bank_sfx_is_waveform(sfx) then return false end
- end
  local saved=bank_profile_base
  for sfx=1,4 do
+  local wave=bank_sfx_is_waveform(sfx)
   for row=0,31 do
    local addr=bank_sfx_base+sfx*bank_sfx_size+row*2
    local value=peek2(addr)
    poke2(saved,value)
    local volume=(value>>9)&7
-   if volume>0 then
+   if not wave and volume>0 then
     poke2(addr,(value&0xf1ff)|(min(7,volume+2)<<9))
    end
    saved+=2

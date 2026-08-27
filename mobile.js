@@ -217,6 +217,7 @@ function materializedBank(bytes) {
   const bank = bytes.slice(64);
   for (let sfx = 1; sfx <= 4; sfx++) {
     const base = 0x100 + sfx * 68;
+    if (bank[base + 66] & 0x80) continue;
     for (let row = 0; row < 32; row++) {
       const offset = base + row * 2;
       const word = bank[offset] | (bank[offset + 1] << 8);

@@ -131,6 +131,42 @@ function _init()
  check(bank_profile_restore(),"profile second restore")
  check(bank_revision==profile_revision and not bank_dirty,"restore does not dirty project")
 
+ -- Waveform profile boundaries snapshot but never transform sample or metadata bytes.
+ memcpy(bank_snapshot_base,bank_audio_base,bank_size)
+ reload(bank_stage_base,bank_audio_base,bank_size,"fixtures/pico8-027-waveform.p8")
+ for sfx in all({1,4}) do
+  memcpy(bank_sfx_addr(sfx,0),bank_stage_base+0x100,bank_sfx_size)
+ end
+ poke2(bank_sfx_addr(2,0),0x0a18)
+ poke2(bank_sfx_addr(3,0),0x0e18)
+ poke2(bank_sfx_addr(8,0),0x8a58)
+ memcpy(bank_stage_base,bank_audio_base,bank_size)
+ bank_project_init()
+ local wave_revision=bank_revision
+ check(bank_profile_apply() and bank_profile_is_active(),"waveform profile apply")
+ for sfx in all({1,4}) do
+  local saved=bank_profile_base+(sfx-1)*64
+  for i=0,63 do
+   check(peek(bank_sfx_addr(sfx,i))==peek(bank_stage_base+0x100+sfx*68+i),
+    "waveform sample exact "..sfx..":"..i)
+   check(peek(saved+i)==peek(bank_sfx_addr(sfx,i)),
+    "waveform snapshot exact "..sfx..":"..i)
+  end
+  for i=64,67 do
+   check(peek(bank_sfx_addr(sfx,i))==peek(bank_stage_base+0x100+sfx*68+i),
+    "waveform metadata exact "..sfx..":"..i)
+  end
+ end
+ check((peek2(bank_sfx_addr(2,0))&0xffff)==0x0e18 and
+  (peek2(bank_sfx_addr(3,0))&0xffff)==0x0e18,"conventional siblings boost and cap")
+ check((peek2(bank_sfx_addr(8,0))&0xffff)==0x8a58,"custom reference exact")
+ check(bank_profile_apply(),"waveform profile idempotent")
+ check(bank_profile_restore() and bank_equal(bank_audio_base,bank_stage_base),
+  "waveform profile restores complete authored bank")
+ check(bank_revision==wave_revision and not bank_dirty,"waveform profile metadata clean")
+ memcpy(bank_audio_base,bank_snapshot_base,bank_size)
+ bank_project_init()
+
  -- Seed values that exercise unrelated high bits, then reset metadata only.
  poke(bank_song_addr(63,3),0xc5)
  poke(bank_song_addr(62,0),0x55)

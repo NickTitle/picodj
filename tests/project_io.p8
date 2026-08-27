@@ -35,11 +35,14 @@ function clipboard_intact()
 end
 
 function waveform_intact()
- if not bank_sfx_is_waveform(0) then return false end
- for i=0,63 do
-  if peek(bank_sfx_addr(0,i))!=(i*29+7)&0xff then return false end
+ for sfx in all({0,1,4}) do
+  if not bank_sfx_is_waveform(sfx) then return false end
+  for i=0,63 do
+   if peek(bank_sfx_addr(sfx,i))!=(i*29+7)&0xff then return false end
+  end
+  if bank_sfx_meta_raw(sfx,1)!=0xa5 then return false end
  end
- return bank_sfx_meta_raw(0,1)==0xa5
+ return (peek2(bank_sfx_addr(8,0))&0xffff)==0x8a58
 end
 
 function saved_byte(offset)
@@ -74,6 +77,10 @@ function _init()
  for i=0,63 do poke(bank_sfx_addr(0,i),(i*29+7)&0xff) end
  poke(bank_sfx_addr(0,65),0xa5)
  poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
+ for sfx in all({1,4}) do
+  memcpy(bank_sfx_addr(sfx,0),bank_sfx_addr(0,0),bank_sfx_size)
+ end
+ poke2(bank_sfx_addr(8,0),0x8a58)
  sfx_clip_count=17
  for i=0,63 do poke(bank_clip_base+i,(i*37+11)&0xff) end
  check(bank_clip_base+63<bank_batch_base and bank_batch_base+63<io_header and

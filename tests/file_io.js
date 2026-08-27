@@ -60,6 +60,7 @@ function envelopeFixture() {
   bytes.set(provenance, 33);
   bytes.set([0, 1, 4], 56);
   for (let i = 64; i < bytes.length; i++) bytes[i] = (i * 37 + 11) & 255;
+  for (let sfx = 1; sfx <= 4; sfx++) bytes[64 + 0x100 + sfx * 68 + 66] &= 0x7f;
   put16(bytes, 8, io.crc16(bytes, 64));
   put16(bytes, 10, io.crc16(bytes, 0, bytes.length, 10, 12));
   return bytes;
@@ -156,6 +157,7 @@ for (let sfx = 1; sfx <= 4; sfx++) {
   }
 }
 
+const nativeWaveform = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform.p8', 'utf8'));
 const waveformEnvelope = envelope.slice();
 const waveformBase = 64 + 0x100;
 for (let sample = 0; sample < 64; sample++) waveformEnvelope[waveformBase + sample] = (sample * 29 + 7) & 255;
@@ -165,6 +167,13 @@ waveformEnvelope[waveformBase + 62] = 0x80;
 waveformEnvelope[waveformBase + 63] = 0xff;
 waveformEnvelope[waveformBase + 65] = 0xa5;
 waveformEnvelope[waveformBase + 66] |= 0x80;
+for (const sfx of [1, 4]) {
+  waveformEnvelope.set(waveformEnvelope.slice(waveformBase, waveformBase + 68),
+    64 + 0x100 + sfx * 68);
+}
+const customReferenceBase = 64 + 0x100 + 8 * 68;
+put16(waveformEnvelope, customReferenceBase, 0x8a58);
+put16(waveformEnvelope, customReferenceBase + 2, 0x8b18);
 put16(waveformEnvelope, 8, io.crc16(waveformEnvelope, 64));
 put16(waveformEnvelope, 10, 0);
 put16(waveformEnvelope, 10, io.crc16(waveformEnvelope, 0, waveformEnvelope.length, 10, 12));
@@ -172,14 +181,43 @@ assert.deepEqual(Array.from(io.parseProjectJson(io.projectJson(waveformEnvelope)
   Array.from(waveformEnvelope), 'waveform samples round-trip through lossless JSON');
 for (const representation of ['authored', 'materialized']) {
   const parsed = io.parseP8Audio(io.p8Audio(waveformEnvelope, representation));
-  assert.deepEqual(Array.from(parsed.bank.slice(0x100, 0x144)),
-    Array.from(waveformEnvelope.slice(waveformBase, waveformBase + 68)),
-    `${representation} PICO-8 export preserves all waveform bytes and metadata`);
-  assert.equal(parsed.bank[0x141], 0xa5,
-    `${representation} PICO-8 export preserves bass and reserved bits`);
+  for (const sfx of [0, 1, 4]) {
+    const bankBase = 0x100 + sfx * 68;
+    const envelopeBase = 64 + bankBase;
+    assert.deepEqual(Array.from(parsed.bank.slice(bankBase, bankBase + 68)),
+      Array.from(waveformEnvelope.slice(envelopeBase, envelopeBase + 68)),
+      `${representation} PICO-8 export preserves waveform SFX ${sfx}`);
+    assert.equal(parsed.bank[bankBase + 65], 0xa5,
+      `${representation} PICO-8 export preserves SFX ${sfx} bass and reserved bits`);
+  }
 }
+const waveformMaterialized = io.materializedBank(waveformEnvelope);
+const expectedWaveformMaterialized = waveformEnvelope.slice(64);
+for (const sfx of [2, 3]) {
+  const base = 0x100 + sfx * 68;
+  for (let row = 0; row < 32; row++) {
+    const offset = base + row * 2;
+    const source = waveformEnvelope[64 + offset] | (waveformEnvelope[65 + offset] << 8);
+    const volume = (source >> 9) & 7;
+    const expected = volume === 0 ? source : (source & 0xf1ff) | (Math.min(7, volume + 2) << 9);
+    expectedWaveformMaterialized[offset] = expected & 255;
+    expectedWaveformMaterialized[offset + 1] = expected >> 8;
+    assert.equal(waveformMaterialized[offset] | (waveformMaterialized[offset + 1] << 8), expected,
+      `conventional sibling SFX ${sfx} row ${row} retains Track-1 boost`);
+  }
+}
+assert.deepEqual(Array.from(waveformMaterialized), Array.from(expectedWaveformMaterialized),
+  'waveform-safe materialization changes only eligible conventional volume bits');
+assert.equal(waveformMaterialized[0x100 + 8 * 68] |
+  (waveformMaterialized[0x101 + 8 * 68] << 8), 0x8a58,
+  'materialization preserves the custom waveform reference');
+const futureWaveform = waveformEnvelope.slice();
+futureWaveform[4] = 3;
+const rejectedFuture = futureWaveform.slice();
+assert.equal(io.materializedBank(futureWaveform), null, 'future envelope rejects atomically');
+assert.deepEqual(Array.from(futureWaveform), Array.from(rejectedFuture),
+  'rejected materialization never mutates its input');
 
-const nativeWaveform = io.parseP8Audio(fs.readFileSync('tests/fixtures/pico8-027-waveform.p8', 'utf8'));
 assert.equal(nativeWaveform.bank[0x100], 0x00);
 assert.equal(nativeWaveform.bank[0x101], 0x7f);
 assert.equal(nativeWaveform.bank[0x13e], 0x80);

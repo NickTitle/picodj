@@ -251,10 +251,11 @@ an imported source's runtime behavior.
 
 For Starfield Track 1:
 
-1. Snapshot the note words in SFX 1..4.
-2. For every word whose volume is nonzero, add two to volume and cap at seven,
-   exactly matching `music.lua` on canonical `shiptoast/pico-strfld` main at
-   `e7e97ab01fdd1848e0b78f27191684412e60daf5`.
+1. Snapshot all 64 data bytes in SFX 1..4.
+2. For each conventional slot, add two to every nonzero row volume and cap at
+   seven, exactly matching `music.lua` on canonical `shiptoast/pico-strfld` main at
+   `e7e97ab01fdd1848e0b78f27191684412e60daf5`. A classified waveform slot is
+   never transformed; its 64 samples and four metadata bytes stay exact.
 3. Call `music(0)`.
 4. On stop, leaving the project, save, checksum, or export of authored bytes,
    stop music and restore the snapshot first.
@@ -268,7 +269,8 @@ Standalone PICO audio export offers two labelled modes:
 
 - **authored + profile:** exact raw bank plus Pocket Tracker metadata;
 - **materialized:** apply the profile to exported bytes so plain `music(0)`
-  sounds like Starfield, with no external Lua helper.
+  sounds like Starfield, with no external Lua helper. Classification happens
+  per slot before materialization so waveform bytes are never decoded as notes.
 
 ## 8. Persistence adapters
 
