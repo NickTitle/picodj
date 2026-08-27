@@ -21,7 +21,7 @@ end
 function edit(field,value,mask)
  sfx_field=field
  local before=bank_note_raw(63,31)
- ck(sfx_begin_row_edit(),"begin field "..field)
+ ck(sfx_begin_edit(),"begin field "..field)
  edit_value=value
  ck(edit_commit(),"commit field "..field)
  own(before,bank_note_raw(63,31),mask,"owned field "..field)
@@ -43,7 +43,7 @@ function _init()
  edit(2,6,0x01c0) edit(3,0,0x8000)
  edit(4,7,0x0e00) edit(5,3,0x7000)
  local before=bank_note_raw(63,31) rev=bank_revision
- sfx_field=1 ck(sfx_begin_row_edit(),"begin cancel")
+ sfx_field=1 ck(sfx_begin_edit(),"begin cancel")
  edit_value=22 edit_cancel()
  ck(bank_note_raw(63,31)==before and bank_revision==rev,"cancel exact")
  setup() poke2(bank_note_addr(63,31),0xd6a5) bank_project_init()
@@ -61,7 +61,7 @@ function _init()
  setup() sfx_row=0 sfx_mode="meta"
  poke(bank_sfx_addr(63,66),0xa2) poke(bank_sfx_addr(63,67),0xc0)
  bank_project_init()
- sfx_meta_field=1 ck(sfx_begin_meta_edit(),"speed begin")
+ sfx_meta_field=1 ck(sfx_begin_edit(),"speed begin")
  local speed_before=bank_sfx_meta_raw(63,1)
  edit_value=31 ck(edit_commit() and bank_sfx_speed(63)==31,"speed")
  rev=bank_revision
@@ -70,10 +70,10 @@ function _init()
  rev=bank_revision
  ck(sfx_undo() and bank_sfx_speed(63)==31 and bank_revision==rev+1,
     "metadata redo exact")
- sfx_meta_field=2 ck(sfx_begin_meta_edit(),"len begin")
+ sfx_meta_field=2 ck(sfx_begin_edit(),"len begin")
  edit_value=12 ck(edit_commit(),"len commit")
  ck(bank_sfx_meta_raw(63,2)==0xac,"len reserved")
- sfx_meta_field=3 ck(sfx_begin_meta_edit(),"end begin")
+ sfx_meta_field=3 ck(sfx_begin_edit(),"end begin")
  edit_value=7 ck(edit_commit(),"end commit")
  ck(bank_sfx_meta_raw(63,3)==0xc7,"end reserved")
  if fails==0 then printh("pocket tracker sfx ui: passed")

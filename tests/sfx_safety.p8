@@ -25,9 +25,11 @@ function _init()
  bank_project_init()
  local bytes={}
  for i=0,67 do add(bytes,peek(bank_sfx_addr(0,i))) end
- ck(not sfx_begin_row_edit() and sfx_error!=nil,"wave row reject")
- sfx_error=nil sfx_meta_field=2
- ck(not sfx_begin_meta_edit() and sfx_error!=nil,"wave meta reject")
+ ck(not sfx_begin_edit() and sfx_error!=nil,"wave row reject")
+ sfx_error=nil sfx_mode="meta" sfx_meta_field=2
+ ck(not sfx_begin_edit() and sfx_error!=nil,"wave meta reject")
+ sfx_error=nil sfx_mode="filters" sfx_filter_field=1
+ ck(not sfx_begin_edit() and sfx_error!=nil,"wave filter reject")
  for i=0,67 do
   ck(peek(bank_sfx_addr(0,i))==bytes[i+1],"wave byte "..i)
  end

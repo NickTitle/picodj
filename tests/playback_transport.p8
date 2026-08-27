@@ -50,6 +50,11 @@ function _init()
   "active edit")
  ck(playing and bank_profile_is_active() and bank_note_authored_raw(1,0)==(old^^1),
   "stop restore edit restart")
+ local filter=bank_sfx_filter(1,1)
+ ck(song_restore_then(function() return bank_set_sfx_filter(1,1,1-filter) end),
+  "active filter edit")
+ ck(playing and bank_profile_is_active() and bank_sfx_filter(1,1)==1-filter,
+  "filter stop restore edit restart")
  stats[57]=false transport_tick=3 update_playhead()
  ck(not playing and not bank_profile_is_active(),"native stop restores profile")
  start_song(0)

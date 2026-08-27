@@ -425,3 +425,24 @@ them exactly: `tracker.html` is SHA-256
 `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
 and `tracker.js` is SHA-256
 `fad2d72a1120ade026b25ff6e5c9125e5c9f4379bcfb4261be87bd9b68ccbe4b`.
+
+## 16. M2 conventional SFX filters
+
+The named filter codec is derived from the PICO-8 0.2.7 native-editor fixture
+and provenance record in `docs/PICO8_027_FILTER_FIXTURE.md`. The focused
+cartridge exhaustively verifies all 108 named filter combinations under both
+editor-mode-bit states, every unsupported raw state, waveform rejection,
+whole-byte commit/Undo/Redo, dirty/revision behavior, and the playback restore
+policy. The complete suite now contains thirteen PICO-8 cartridges plus all
+three Node regressions.
+
+The accepted five-file production graph measures exactly **6,533 tokens**,
+five below the arc ceiling of 6,538 and twenty below the unchanged 6,553
+reserve gate. The exported PXA header records 39,220 raw code bytes and 10,219
+compressed bytes, 2,069 below the unchanged 12,288-byte gate.
+
+Two independent exports are byte-identical and match the tracked artifacts:
+`tracker.html` SHA-256
+`858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and `tracker.js` SHA-256
+`08bcc9adb9e084402eac1d7348956a1a4d37e16f5751407d5073920ede7be2ae`.
