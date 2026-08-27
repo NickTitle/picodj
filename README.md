@@ -107,10 +107,12 @@ fixture-unsupported filter states remain visibly read-only.
 Classified waveform SFX 0–7 expose their 64 signed sample bytes as 32 raw-hex
 pairs. Up/Down selects a pair, Left/Right selects its even or odd byte, and O
 opens the same wrapping scalar editor used elsewhere. The footer names the
-exact sample index and signed amplitude. Waveform metadata stays raw/read-only,
-and direct waveform preview remains unavailable; a conventional note that
-references the waveform is the audible path. The native 0.2.7 fixture and
-checksum are documented in `docs/PICO8_027_WAVEFORM_FIXTURE.md`.
+exact sample index and signed amplitude. Hold X → Metadata shows all four raw
+bytes and exposes the native `bass off/on` bit as one masked scalar edit;
+unknown bits and waveform mode remain preserved. Direct waveform preview is
+unavailable, so a conventional note referencing the waveform is the audible
+path. The paired native 0.2.7 fixture and checksums are documented in
+`docs/PICO8_027_WAVEFORM_FIXTURE.md`.
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
 plus a calibrated 1,639-token probe. Its pass marker gates the shipped cart at

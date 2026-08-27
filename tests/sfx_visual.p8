@@ -34,6 +34,11 @@ function _init()
  draw_sfx_handoff()
  extcmd("set_filename","picodj-sfx-waveform-m3")
  extcmd("screen")
+ sfx_mode="meta" sfx_meta_field=1
+ poke(bank_sfx_addr(0,65),0x11)
+ draw_sfx_handoff()
+ extcmd("set_filename","picodj-sfx-waveform-bass-m3")
+ extcmd("screen")
  printh("pocket tracker sfx visual: passed")
  extcmd("shutdown")
 end

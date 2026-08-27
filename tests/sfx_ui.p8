@@ -92,6 +92,11 @@ function _init()
  ck(sfx_begin_edit() and edit_width==1 and edit_value==0x7f,"wave sample begin")
  edit_value=0x80 ck(edit_commit() and peek(bank_sfx_addr(0,0))==0x80,
   "wave sample commit")
+ sfx_mode="meta" sfx_meta_field=1
+ poke(bank_sfx_addr(0,65),0xb0) bank_project_init()
+ ck(sfx_begin_edit() and edit_label=="bass" and edit_value==0,"wave bass begin")
+ edit_value=1 ck(edit_commit() and bank_sfx_meta_raw(0,1)==0xb1,
+  "wave bass preserves reserved")
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end
  extcmd("shutdown")

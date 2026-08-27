@@ -39,7 +39,7 @@ function waveform_intact()
  for i=0,63 do
   if peek(bank_sfx_addr(0,i))!=(i*29+7)&0xff then return false end
  end
- return true
+ return bank_sfx_meta_raw(0,1)==0xa5
 end
 
 function saved_byte(offset)
@@ -72,6 +72,7 @@ function _init()
  project_test_init()
  bank_project_init()
  for i=0,63 do poke(bank_sfx_addr(0,i),(i*29+7)&0xff) end
+ poke(bank_sfx_addr(0,65),0xa5)
  poke(bank_sfx_addr(0,66),peek(bank_sfx_addr(0,66))|0x80)
  sfx_clip_count=17
  for i=0,63 do poke(bank_clip_base+i,(i*37+11)&0xff) end
