@@ -34,16 +34,18 @@ clamps at their native bounds; SFX values wrap from `3f` to `00`.
 
 M1.4A uses one namespaced browser last-known-good slot as the safe reversible
 default while the native data-cart destination remains undecided. It stores the
-complete 4,608-byte authored bank plus project name, revision, Track 1 playback
-profile, and source selection in a fixed checksummed v2 envelope. Legacy JSON
+complete 4,608-byte authored bank plus project name, revision, one exact
+profile-none or Track-1 profile tuple, and source selection in a fixed
+checksummed v2 envelope. Legacy JSON
 and WAV actions remain disabled; the old 78-byte sketch format is never used by
 save or load.
 
-The browser can re-import its own authored `.p8` only when one complete music
-section, one complete SFX section, and the exact checksummed PTP2 sidecar are
-present. Headerless generic/materialized carts remain rejected; an explicit
-profile-none contract and native fixed-slot data-cart persistence are still
-separate decisions.
+The browser re-imports its own authored `.p8` when complete unique audio
+sections and the exact checksummed PTP2 sidecar are present. Headerless generic
+and materialized carts with unique valid audio sections become profile-none,
+using deterministic filename metadata and no inferred external Lua transform.
+Malformed/duplicate sidecars reject. Native fixed-slot data-cart persistence is
+the remaining separate M3 decision.
 
 ## Legacy sketch
 

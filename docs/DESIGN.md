@@ -140,8 +140,8 @@ audio bits are not rejected solely because the current UI cannot name them.
 M1.4A's browser slot uses a fixed 4,672-byte binary representation: a 64-byte
 header followed by the exact 4,608-byte authored bank. The header records
 `PTP2`, format/header/total lengths, bank and envelope CRC-16 values, revision,
-the versioned Track 1 `+2` playback profile, bounded project/source strings,
-and source pattern/SFX selection. The envelope CRC treats its own two bytes as
+one of two exact profile tuples (`none=0/0/0/0` or Track-1 `1/1/1/4`), bounded
+project/source strings, and source pattern/SFX selection. The envelope CRC treats its own two bytes as
 zero. Browser local storage wraps those bytes as deterministic lowercase hex
 under `pocket-tracker:project:v2:last-known-good`; decoded bytes, rather than
 JSON formatting, remain authoritative.
@@ -250,9 +250,10 @@ model to extend.
 
 ## 7. Playback and non-destructive profiles
 
-Normal projects call `music(pattern)` directly against the bank. A playback
-profile is an ordered, versioned set of temporary transforms required to match
-an imported source's runtime behavior.
+Profile-none projects call `music(pattern)` directly against the authored bank
+without snapshot or gain writes and are labelled `raw`. A playback profile is
+an ordered, versioned set of temporary transforms required to match an imported
+source's runtime behavior; Track-1 is labelled `+2`.
 
 For Starfield Track 1:
 
@@ -356,18 +357,20 @@ The browser codec locates `__music__` and `__sfx__` section boundaries,
 validates hexadecimal line lengths/counts, decodes field-aware SFX rows and
 pattern flags, and produces a raw 4,608-byte bank. The general decoder keeps
 PICO-8-compatible omitted-row defaults for fixture and export verification.
-The user-facing import boundary is stricter: it requires exactly one complete
-64-line section of each kind and exactly one well-formed 64-byte
-`-- pocket-tracker-header:` sidecar. It combines that untouched sidecar with
-the decoded bank and accepts only an already-valid PTP2 envelope with the fixed
-Track-1 profile/source selection and matching bank/envelope checksums.
+The authenticated import boundary requires exactly one complete 64-line section
+of each kind and one well-formed 64-byte `-- pocket-tracker-header:` sidecar. It
+combines that untouched sidecar with the decoded bank and accepts only an
+already-valid PTP2 envelope with an exact supported profile tuple and matching
+bank/envelope checksums. Without a sidecar, unique 0–64-line sections import as
+a checksummed profile-none envelope with deterministic filename metadata.
+Malformed or duplicate sidecars never downgrade to the headerless path.
 
 Native import uses `reload(staging, 0x3100, 0x1200, filename)` from a fixed data
 cart and then the same in-cart bank validator.
 
-The browser Files panel exposes JSON plus lossless re-import of Pocket Tracker
-authored `.p8` exports. Headerless generic and materialized exports reject with
-`no lossless profile header`; the browser never invents Track-1 semantics.
+The browser Files panel exposes JSON, lossless re-import of Pocket Tracker
+authored `.p8` exports, and headerless generic/materialized audio import as
+profile-none. It never invents Track-1 semantics or infers arbitrary Lua.
 Native fixed-slot data-cart import remains a separate persistence arc.
 
 ### `.p8` export
@@ -379,7 +382,9 @@ bytes; SFX note words are converted into five-digit field order, not dumped as
 little-endian words.
 
 Lossless Pocket Tracker JSON and authored `.p8` carry the same authoritative
-envelope metadata and playback profile; materialized `.p8` remains export-only.
+envelope metadata and optional playback profile. Profile-none JSON uses
+`playbackProfile: null`; its authored sidecar remains lossless, and its
+materialized bank is identical to authored bytes.
 
 ## 11. Verification strategy
 

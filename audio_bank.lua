@@ -4,7 +4,7 @@ bank_audio_base,bank_song_base,bank_sfx_base=0x3100,0x3100,0x3200
 bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200
 bank_profile_base,bank_audition_base=0xa400,0xa500
 bank_clip_base,bank_batch_base=0xa544,0xa584
-bank_audition_sfx,bank_audition_channel=63,3
+bank_audition_sfx,bank_audition_channel,bank_profile_kind=63,3,1
 
 bank_pattern_count,bank_channel_count,bank_sfx_count=64,4,64
 bank_row_count,bank_sfx_size=32,68
@@ -207,7 +207,7 @@ function bank_profile_is_active()
 end
 
 function bank_profile_apply()
- if bank_profile_active then return true end
+ if bank_profile_active or bank_profile_kind<1 then return true end
  local saved=bank_profile_base
  for sfx=1,4 do
   local wave=bank_sfx_is_waveform(sfx)

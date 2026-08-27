@@ -41,12 +41,18 @@ const document = {
   },
   createElement() { throw new Error('outer document must remain untouched'); },
 };
+const stored = new Map();
+const localStorage = {
+  getItem(key) { return stored.has(key) ? stored.get(key) : null; },
+  setItem(key, value) { stored.set(key, String(value)); },
+  removeItem(key) { stored.delete(key); },
+};
 
 vm.runInNewContext(source, {
   Blob,
   URL,
   document,
-  localStorage: {getItem() { return null; }, setItem() {}, removeItem() {}},
+  localStorage,
   requestAnimationFrame() {},
   setTimeout() {},
 });
@@ -82,8 +88,8 @@ const importChange = outerListeners.get('project-import:change');
 assert.equal(typeof importChange, 'function');
 projectImport.files = [{name: 'headerless.P8', text: async () => '__sfx__\n__music__\n'}];
 Promise.resolve(importChange()).then(() => {
-  assert.match(fileStatus.textContent, /no lossless profile header/);
-  assert.equal(fileStatus.style.color, '#ff8a8a');
+  assert.match(fileStatus.textContent, /Imported audio sections as no profile/);
+  assert.equal(fileStatus.style.color, '#c9c9de');
   console.log('pocket tracker mobile hold: passed');
 }).catch((error) => {
   console.error(error);

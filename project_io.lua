@@ -37,24 +37,35 @@ function io_put_text(offset,text,limit)
  for i=1,length do poke(io_header+offset+i,ord(text,i)) end
 end
 
+function io_get_text(o)
+ local s=""
+ for i=1,peek(io_header+o) do s..=chr(peek(io_header+o+i)) end
+ return s
+end
+
+function io_envelope_crc(base)
+ local crc=0xffff
+ for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
+ for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(base+i)) end
+ return crc
+end
+
 function io_prepare_envelope()
  if bank_profile_is_active() then return false end
  memset(io_header,0,io_header_size)
- poke(io_header,80) poke(io_header+1,84) poke(io_header+2,80) poke(io_header+3,50)
- poke(io_header+4,2) poke(io_header+5,io_header_size)
+ poke2(io_header,0x5450) poke2(io_header+2,0x3250)
+ poke2(io_header+4,io_header_size*256+2)
  io_put16(io_header+6,io_envelope_size)
  local bank_crc=bank_checksum(bank_audio_base)
  if bank_crc==nil then return false end
  io_put16(io_header+8,bank_crc)
  io_put16(io_header+12,min(0x7fff,max(0,bank_revision)))
- poke(io_header+14,1) poke(io_header+15,1)
+ local profile=bank_profile_kind
+ poke2(io_header+14,profile*257)
  io_put_text(16,io_project_name,15)
  io_put_text(32,io_project_source,23)
- poke(io_header+56,0) poke(io_header+57,1) poke(io_header+58,4)
- local crc=0xffff
- for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
- for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(bank_audio_base+i)) end
- io_put16(io_header+10,crc)
+ poke(io_header+57,profile) poke(io_header+58,profile*4)
+ io_put16(io_header+10,io_envelope_crc(bank_audio_base))
  return true
 end
 
@@ -65,7 +76,7 @@ end
 
 function io_begin_frame(command,id,sequence,offset,total,length,flags)
  memset(io_gpio,0,128)
- poke(io_gpio,80) poke(io_gpio+1,84) poke(io_gpio+2,75) poke(io_gpio+3,50)
+ poke2(io_gpio,0x5450) poke2(io_gpio+2,0x324b)
  poke(io_gpio+4,1) poke(io_gpio+5,command) poke(io_gpio+6,id) poke(io_gpio+7,sequence)
  io_put16(io_gpio+8,offset) io_put16(io_gpio+10,total)
  poke(io_gpio+12,length) poke(io_gpio+13,flags)
@@ -92,8 +103,7 @@ function io_emit_control(command,flags)
 end
 
 function io_frame_valid(command)
- if peek(io_gpio)!=80 or peek(io_gpio+1)!=84 or peek(io_gpio+2)!=75 or
-    peek(io_gpio+3)!=50 or peek(io_gpio+4)!=1 or
+ if peek2(io_gpio)!=0x5450 or peek2(io_gpio+2)!=0x324b or peek(io_gpio+4)!=1 or
     peek(io_gpio+5)!=command or peek(io_gpio+12)>io_payload_size then return false end
  return io_get16(io_gpio+14)==io_frame_crc()
 end
@@ -174,21 +184,20 @@ function io_accept_load_page()
 end
 
 function io_envelope_valid()
- if peek(io_header)!=80 or peek(io_header+1)!=84 or peek(io_header+2)!=80 or
-    peek(io_header+3)!=50 or peek(io_header+4)!=2 or
+ local profile=peek(io_header+14)
+ if peek2(io_header)!=0x5450 or peek2(io_header+2)!=0x3250 or peek(io_header+4)!=2 or
     peek(io_header+5)!=io_header_size or io_get16(io_header+6)!=io_envelope_size or
-    peek(io_header+14)!=1 or peek(io_header+15)!=1 or
+    profile>1 or peek(io_header+15)!=profile or
     peek(io_header+16)>15 or peek(io_header+32)>23 or
-    peek(io_header+56)!=0 or peek(io_header+57)!=1 or peek(io_header+58)!=4 or
-    peek(io_header+59)!=0 or peek(io_header+60)!=0 or peek(io_header+61)!=0 or
-    peek(io_header+62)!=0 or peek(io_header+63)!=0 then return false end
+    peek(io_header+56)!=0 then return false end
+ for i=57,63 do
+  if peek(io_header+i)!=(i==57 and profile or i==58 and profile*4 or 0) then return false end
+ end
  local expected_bank=io_get16(io_header+8)
  if (bank_checksum(bank_stage_base)&0xffff)!=(expected_bank&0xffff) then return false end
  local expected=io_get16(io_header+10)
  poke(io_header+10,0) poke(io_header+11,0)
- local crc=0xffff
- for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
- for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(bank_stage_base+i)) end
+ local crc=io_envelope_crc(bank_stage_base)
  io_put16(io_header+10,expected)
  return (crc&0xffff)==(expected&0xffff)
 end
@@ -199,6 +208,9 @@ function io_commit_loaded()
  end
  local expected=io_get16(io_header+8)
  if not bank_stage_commit(expected) then io_fail("load commit failed",8) return end
+ bank_profile_kind=peek(io_header+14)
+ io_project_name=io_get_text(16) io_project_source=io_get_text(32)
+ song_pattern=peek(io_header+56)
  bank_revision=io_get16(io_header+12)
  bank_dirty=false bank_snapshot_valid=false
  undo_owner=nil

@@ -78,10 +78,11 @@ function get16(bytes, offset) { return bytes[offset] | (bytes[offset + 1] << 8);
 
 function envelopeValid(bytes) {
   if (!bytes || bytes.length !== projectEnvelopeSize) return false;
+  const profile = bytes[14];
   if (bytes[0] !== 80 || bytes[1] !== 84 || bytes[2] !== 80 || bytes[3] !== 50 ||
       bytes[4] !== 2 || bytes[5] !== 64 || get16(bytes, 6) !== projectEnvelopeSize ||
-      bytes[14] !== 1 || bytes[15] !== 1 || bytes[16] > 15 || bytes[32] > 23 ||
-      bytes[56] !== 0 || bytes[57] !== 1 || bytes[58] !== 4) return false;
+      profile > 1 || bytes[15] !== profile || bytes[16] > 15 || bytes[32] > 23 ||
+      bytes[56] !== 0 || bytes[57] !== profile || bytes[58] !== profile * 4) return false;
   for (let i = 59; i < 64; i++) if (bytes[i] !== 0) return false;
   if (headerText(bytes, 16, 15) === null || headerText(bytes, 32, 23) === null) return false;
   return crc16(bytes, 64) === get16(bytes, 8) &&
@@ -166,10 +167,10 @@ function projectJson(bytes) {
     version: 2,
     project: {name, revision: get16(bytes, 12)},
     source: {format: 'pico-8', provenance, pattern: bytes[56]},
-    playbackProfile: {
+    playbackProfile: bytes[14] ? {
       kind: 'track-1-volume-boost', version: bytes[15],
       sfxStart: bytes[57], sfxCount: bytes[58], volumeBoost: 2,
-    },
+    } : null,
     bank: {
       encoding: 'hex', length: projectEnvelopeSize - 64,
       crc16: checksumHex(get16(bytes, 8)), data: envelopeHex(bytes.slice(64)),
@@ -181,16 +182,16 @@ function projectJson(bytes) {
 function parseProjectJson(raw) {
   let value;
   try { value = JSON.parse(raw); } catch (_) { return null; }
+  const profile = value?.playbackProfile;
   if (!exactKeys(value, ['format', 'version', 'project', 'source', 'playbackProfile', 'bank', 'checksum']) ||
       value.format !== 'pocket-tracker-project' || value.version !== 2 ||
       !exactKeys(value.project, ['name', 'revision']) || !safeText(value.project.name, 15) ||
       !Number.isInteger(value.project.revision) || value.project.revision < 0 || value.project.revision > 0x7fff ||
       !exactKeys(value.source, ['format', 'provenance', 'pattern']) || value.source.format !== 'pico-8' ||
       !safeText(value.source.provenance, 23) || value.source.pattern !== 0 ||
-      !exactKeys(value.playbackProfile, ['kind', 'version', 'sfxStart', 'sfxCount', 'volumeBoost']) ||
-      value.playbackProfile.kind !== 'track-1-volume-boost' || value.playbackProfile.version !== 1 ||
-      value.playbackProfile.sfxStart !== 1 || value.playbackProfile.sfxCount !== 4 ||
-      value.playbackProfile.volumeBoost !== 2 ||
+      profile !== null && (!exactKeys(profile, ['kind', 'version', 'sfxStart', 'sfxCount', 'volumeBoost']) ||
+      profile.kind !== 'track-1-volume-boost' || profile.version !== 1 ||
+      profile.sfxStart !== 1 || profile.sfxCount !== 4 || profile.volumeBoost !== 2) ||
       !exactKeys(value.bank, ['encoding', 'length', 'crc16', 'data']) || value.bank.encoding !== 'hex' ||
       value.bank.length !== projectEnvelopeSize - 64 || !/^[0-9a-f]{4}$/.test(value.bank.crc16) ||
       !exactKeys(value.checksum, ['algorithm', 'envelope']) ||
@@ -202,11 +203,12 @@ function parseProjectJson(raw) {
   put16(bytes, 6, projectEnvelopeSize);
   put16(bytes, 8, parseInt(value.bank.crc16, 16));
   put16(bytes, 12, value.project.revision);
-  bytes[14] = 1;
-  bytes[15] = 1;
+  const kind = profile === null ? 0 : 1;
+  bytes[14] = kind;
+  bytes[15] = kind;
   putHeaderText(bytes, 16, 15, value.project.name);
   putHeaderText(bytes, 32, 23, value.source.provenance);
-  bytes.set([0, 1, 4], 56);
+  bytes.set([0, kind, kind * 4], 56);
   bytes.set(bank, 64);
   put16(bytes, 10, crc16(bytes, 0, bytes.length, 10, 12));
   return checksumHex(get16(bytes, 10)) === value.checksum.envelope && envelopeValid(bytes) ? bytes : null;
@@ -215,6 +217,7 @@ function parseProjectJson(raw) {
 function materializedBank(bytes) {
   if (!envelopeValid(bytes)) return null;
   const bank = bytes.slice(64);
+  if (bytes[14] === 0) return bank;
   for (let sfx = 1; sfx <= 4; sfx++) {
     const base = 0x100 + sfx * 68;
     if (bank[base + 66] & 0x80) continue;
@@ -467,28 +470,42 @@ function importProjectJson(raw, storage = localStorage) {
   return bytes !== null && storeLastKnownGood(bytes, storage);
 }
 
-function importProjectP8(raw, storage = localStorage) {
+function importProjectP8(raw, storage = localStorage, filename = '') {
   if (typeof raw !== 'string') return false;
   const lines = raw.replace(/\r\n?/g, '\n').split('\n');
-  const sidecars = lines.filter((line) => line.startsWith('-- pocket-tracker-header:'));
-  if (sidecars.length === 0) return null;
-  if (sidecars.length !== 1 || !/^-- pocket-tracker-header: [0-9a-f]{128}$/.test(sidecars[0])) return false;
-  const complete = (name) => {
+  const sidecars = lines.filter((line) => line.includes('pocket-tracker-header'));
+  const sectionValid = (name, complete) => {
     const starts = lines.reduce((found, line, index) => line === name ? [...found, index] : found, []);
     if (starts.length !== 1) return false;
     let count = 0;
     for (let i = starts[0] + 1; i < lines.length && !/^__[a-z0-9_]+__$/.test(lines[i]); i++) {
       if (lines[i] !== '') count++;
     }
-    return count === 64;
+    return complete ? count === 64 : count <= 64;
   };
-  if (!complete('__sfx__') || !complete('__music__')) return false;
+  if (sidecars.length > 0 &&
+      (sidecars.length !== 1 || !/^-- pocket-tracker-header: [0-9a-f]{128}$/.test(sidecars[0]))) return false;
+  const authenticated = sidecars.length === 1;
+  if (!sectionValid('__sfx__', authenticated) || !sectionValid('__music__', authenticated)) return false;
   const parsed = parseP8Audio(lines.join('\n'));
-  if (!parsed?.header) return false;
+  if (!parsed || authenticated !== !!parsed.header) return false;
   const bytes = new Uint8Array(projectEnvelopeSize);
-  bytes.set(parsed.header);
+  if (authenticated) bytes.set(parsed.header);
+  else {
+    const basename = String(filename).replace(/^.*[\\/]/, '').replace(/\.p8$/i, '')
+      .replace(/[^\x20-\x7e]/gu, '_');
+    bytes.set([80, 84, 80, 50, 2, 64]);
+    put16(bytes, 6, projectEnvelopeSize);
+    putHeaderText(bytes, 16, 15, (basename || 'imported p8').slice(0, 15));
+    putHeaderText(bytes, 32, 23, (basename || 'browser p8').slice(0, 23));
+  }
   bytes.set(parsed.bank, 64);
-  return envelopeValid(bytes) && storeLastKnownGood(bytes, storage);
+  if (!authenticated) {
+    put16(bytes, 8, crc16(parsed.bank));
+    put16(bytes, 10, crc16(bytes, 0, bytes.length, 10, 12));
+  }
+  return envelopeValid(bytes) && storeLastKnownGood(bytes, storage) &&
+    (authenticated || 'raw');
 }
 
 function exportStoredFile(kind, storage = localStorage) {
@@ -537,10 +554,11 @@ projectImport?.addEventListener('change', async () => {
     return;
   }
   const p8 = /\.p8$/i.test(file.name);
-  const ok = p8 ? importProjectP8(raw) : importProjectJson(raw);
-  setFileStatus(ok ? (p8 ? 'Imported authored .p8. Choose Load in the tracker.' :
+  const ok = p8 ? importProjectP8(raw, localStorage, file.name) : importProjectJson(raw);
+  setFileStatus(ok ? (ok === 'raw' ?
+    'Imported audio sections as no profile; external Lua is not included. Choose Load in the tracker.' : p8 ?
+    'Imported authored .p8. Choose Load in the tracker.' :
     'Imported to the browser slot. Choose Load in the tracker to commit it.') :
-    p8 && ok === null ? 'Cannot import .p8: no lossless profile header. The browser slot is unchanged.' :
     'Invalid project file. The browser slot and live project are unchanged.', !ok);
 });
 

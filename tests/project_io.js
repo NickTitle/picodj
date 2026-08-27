@@ -53,10 +53,10 @@ assert.doesNotMatch(mobileSource, /renderWav|readProject|pocket-tracker-song/,
 assert.match(indexSource, /Export Pocket Tracker JSON/);
 assert.match(indexSource, /Export \.p8 — authored \+ profile/);
 assert.match(indexSource, /Export \.p8 — materialized playback/);
-assert.match(indexSource, /Import JSON \/ authored \.p8/);
+assert.match(indexSource, /Import JSON \/ \.p8 audio/);
 assert.match(indexSource, /accept="\.json,\.p8,application\/json"/);
 assert.match(mobileSource, /Imported authored \.p8\. Choose Load in the tracker\./);
-assert.match(mobileSource, /no lossless profile header/);
+assert.match(mobileSource, /Imported audio sections as no profile/);
 
 function put16(bytes, offset, value) {
   bytes[offset] = value & 255;
@@ -85,6 +85,19 @@ function fixtureEnvelope() {
 
 const envelope = fixtureEnvelope();
 assert.equal(io.envelopeValid(envelope), true);
+for (const kind of [0, 1, 2]) for (const version of [0, 1, 2]) {
+  for (const start of [0, 1, 2]) for (const count of [0, 1, 4, 5]) {
+    const vector = envelope.slice();
+    vector.set([kind, version], 14);
+    vector.set([0, start, count], 56);
+    put16(vector, 10, 0);
+    put16(vector, 10, io.crc16(vector, 0, vector.length, 10, 12));
+    assert.equal(io.envelopeValid(vector),
+      kind === 0 && version === 0 && start === 0 && count === 0 ||
+      kind === 1 && version === 1 && start === 1 && count === 4,
+      `profile tuple ${kind}/${version}/${start}/${count}`);
+  }
+}
 assert.equal(io.storeLastKnownGood(envelope), true);
 assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope));
 const modeEnvelope = envelope.slice();
@@ -123,6 +136,21 @@ assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(envelope),
   'authored PICO-8 import prepares the exact envelope for staged Load');
 assert.deepEqual(gpio, gpioBeforeP8Import,
   'authored PICO-8 import leaves live GPIO untouched until staged Load');
+
+const materialized = io.p8Audio(envelope, 'materialized');
+assert.equal(files.importProjectP8(materialized, localStorage, 'Pocket ★.p8'), 'raw');
+const rawEnvelope = io.loadLastKnownGood();
+assert.deepEqual(Array.from(rawEnvelope.slice(14, 16)), [0, 0]);
+assert.deepEqual(Array.from(rawEnvelope.slice(56, 59)), [0, 0, 0]);
+assert.equal(JSON.parse(io.projectJson(rawEnvelope)).playbackProfile, null);
+assert.deepEqual(Array.from(io.parseProjectJson(io.projectJson(rawEnvelope))), Array.from(rawEnvelope));
+assert.deepEqual(Array.from(rawEnvelope.slice(64)), Array.from(io.parseP8Audio(materialized).bank));
+assert.equal(io.p8Audio(rawEnvelope, 'materialized'),
+  io.p8Audio(rawEnvelope, 'authored').replace(/\n-- pocket-tracker-header: [0-9a-f]{128}/, '')
+    .replace('authored+profile', 'materialized'),
+  'profile-none materialized audio equals authored audio');
+assert.deepEqual(gpio, gpioBeforeP8Import, 'headerless import leaves GPIO untouched');
+assert.equal(io.storeLastKnownGood(envelope), true);
 
 io.writeFrame(gpio, io.commands.loadRequest, 1, 0, 0, envelope.length);
 assert.equal(gpio[14] | (gpio[15] << 8), 0x4bca, 'GPIO CRC matches cartridge vector');

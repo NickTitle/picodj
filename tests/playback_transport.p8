@@ -34,8 +34,22 @@ function _init()
  memcpy(bank_sfx_addr(7,0),bank_sfx_addr(0,0),bank_sfx_size)
  local authored=snap(bank_sfx_addr(1,0),bank_sfx_size*4)
  local scratch=snap(bank_sfx_addr(63,0),bank_sfx_size)
+ local raw=snap(bank_audio_base,bank_size)
+ bank_profile_kind=0
+ ck(start_song(0) and playing and not bank_profile_is_active(),"raw profile start")
+ ck(same(bank_audio_base,raw,bank_size) and song_status()=="p00 r00 clean raw all a----",
+  "raw playback zero writes status")
+ local calls=#music_calls revision=bank_revision
+ ck(song_restore_then(function() return bank_write(bank_song_addr(0,0),1,2) end),"raw active edit")
+ raw[1]=2
+ ck(#music_calls==calls+2 and same(bank_audio_base,raw,bank_size) and
+  bank_revision==revision+1 and playing and not bank_profile_is_active(),"raw edit restart once")
+ stop_song()
+ poke(bank_song_addr(0,0),0x81)
+ bank_profile_kind=1 bank_project_init() music_calls={}
  ck(start_song(0) and start_song(0),"idempotent play")
- ck(#music_calls==1 and bank_profile_is_active(),"single boosted start")
+ ck(bank_profile_is_active() and song_status()=="p00 r00 clean +2 all a----",
+  "single boosted start")
  ck(start_audition(0),"row preview")
  ck(not playing and not bank_profile_is_active(),"preview stops restores music")
  ck(same(bank_sfx_addr(1,0),authored,bank_sfx_size*4),"sfx 1-4 exact")
@@ -64,7 +78,7 @@ function _init()
  ck(playing and bank_profile_is_active() and bank_sfx_filter(1,1)==1-filter,
   "filter stop restore edit restart")
  local sample_addr=bank_sfx_addr(0,0)
- local calls=#music_calls revision=bank_revision
+ calls=#music_calls revision=bank_revision
  ck(song_restore_then(function() return bank_write(sample_addr,1,0x80) end),
   "active waveform edit")
  ck(#music_calls==calls+2 and peek(sample_addr)==0x80 and

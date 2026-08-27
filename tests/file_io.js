@@ -67,6 +67,19 @@ function envelopeFixture() {
 }
 
 const envelope = envelopeFixture();
+for (const kind of [0, 1, 2]) for (const version of [0, 1, 2]) {
+  for (const start of [0, 1, 2]) for (const count of [0, 1, 4, 5]) {
+    const vector = envelope.slice();
+    vector.set([kind, version], 14);
+    vector.set([0, start, count], 56);
+    put16(vector, 10, 0);
+    put16(vector, 10, io.crc16(vector, 0, vector.length, 10, 12));
+    assert.equal(io.envelopeValid(vector),
+      kind === 0 && version === 0 && start === 0 && count === 0 ||
+      kind === 1 && version === 1 && start === 1 && count === 4,
+      `profile tuple ${kind}/${version}/${start}/${count}`);
+  }
+}
 const json = io.projectJson(envelope);
 assert.equal(typeof json, 'string');
 assert.equal(io.projectJson(envelope), json, 'JSON encoding is deterministic');
@@ -181,10 +194,10 @@ const partialSection = (name) => {
   return lines.join('\n');
 };
 const sidecar = authored.match(/^-- pocket-tracker-header: [0-9a-f]{128}$/m)[0];
-rejectP8(materialized, null, 'materialized PICO-8 import');
-rejectP8(authored.replace(`${sidecar}\n`, ''), null, 'headerless PICO-8 import');
 rejectP8(authored.replace(sidecar, `${sidecar}\n${sidecar}`), false, 'duplicate sidecar');
 rejectP8(authored.replace(sidecar, `${sidecar.slice(0, -1)}g`), false, 'malformed sidecar');
+rejectP8(authored.replace(sidecar, '-- pocket-tracker-header : malformed'), false,
+  'malformed header marker never downgrades');
 rejectP8(authored.replace('__sfx__', ''), false, 'missing SFX section');
 rejectP8(`${authored}\n__sfx__\n`, false, 'duplicate SFX section');
 rejectP8(authored.replace('__music__', ''), false, 'missing music section');
@@ -230,6 +243,52 @@ p8ReadBackStorage.getItem = function(key) {
 assert.equal(files.importProjectP8(authored, p8ReadBackStorage), false);
 assert.equal(p8ReadBackStorage.getItem(io.key), p8Stable,
   'authored PICO-8 read-back failure restores prior durable data');
+
+const gpioBeforeRawImport = gpio.slice();
+assert.equal(files.importProjectP8(materialized, localStorage, 'folder/Materialized ★.p8'), 'raw');
+const noneEnvelope = io.loadLastKnownGood();
+assert.deepEqual(Array.from(noneEnvelope.slice(14, 16)), [0, 0]);
+assert.deepEqual(Array.from(noneEnvelope.slice(56, 59)), [0, 0, 0]);
+assert.equal(noneEnvelope[12] | (noneEnvelope[13] << 8), 0);
+assert.equal(Buffer.from(noneEnvelope.slice(17, 32)).toString().replace(/\0.*$/, ''),
+  'Materialized _');
+assert.equal(Buffer.from(noneEnvelope.slice(33, 56)).toString().replace(/\0.*$/, ''),
+  'Materialized _');
+assert.deepEqual(Array.from(noneEnvelope.slice(64)), Array.from(io.parseP8Audio(materialized).bank));
+assert.deepEqual(gpio, gpioBeforeRawImport, 'headerless import leaves live GPIO untouched');
+const noneJson = io.projectJson(noneEnvelope);
+assert.equal(JSON.parse(noneJson).playbackProfile, null);
+assert.deepEqual(Array.from(io.parseProjectJson(noneJson)), Array.from(noneEnvelope),
+  'profile-none JSON round-trips exactly');
+const noneAuthored = io.p8Audio(noneEnvelope, 'authored');
+assert.match(noneAuthored, /pocket-tracker-header:/);
+assert.equal(files.importProjectP8(noneAuthored), true);
+assert.deepEqual(Array.from(io.loadLastKnownGood()), Array.from(noneEnvelope),
+  'profile-none authenticated sidecar re-imports exactly');
+assert.deepEqual(Array.from(io.materializedBank(noneEnvelope)), Array.from(noneEnvelope.slice(64)));
+const noneMaterialized = io.p8Audio(noneEnvelope, 'materialized');
+assert.deepEqual(Array.from(io.parseP8Audio(noneMaterialized).bank), Array.from(noneEnvelope.slice(64)));
+for (let pass = 0; pass < 3; pass++) {
+  assert.equal(files.importProjectP8(noneMaterialized, localStorage, 'Materialized _.p8'), 'raw');
+  const cycle = io.loadLastKnownGood();
+  assert.deepEqual(Array.from(cycle), Array.from(noneEnvelope), `profile-none cycle ${pass + 1}`);
+}
+assert.equal(files.importProjectP8('__sfx__\n__music__\n', localStorage, '.p8'), 'raw');
+const fallback = io.loadLastKnownGood();
+assert.equal(Buffer.from(fallback.slice(17, 32)).toString().replace(/\0.*$/, ''), 'imported p8');
+assert.equal(Buffer.from(fallback.slice(33, 56)).toString().replace(/\0.*$/, ''), 'browser p8');
+
+const rawStable = localStorage.getItem(io.key);
+const rejectRaw = (raw, label) => {
+  const gpioBefore = gpio.slice();
+  assert.equal(files.importProjectP8(raw, localStorage, 'raw.p8'), false, label);
+  assert.equal(localStorage.getItem(io.key), rawStable, `${label} preserves durable slot`);
+  assert.deepEqual(gpio, gpioBefore, `${label} preserves GPIO`);
+};
+rejectRaw(`${materialized}\n__music__\n`, 'duplicate headerless music section');
+rejectRaw(materialized.replace('__sfx__', ''), 'missing headerless SFX section');
+rejectRaw(materialized.replace(/^[0-9a-f]{168}$/m, (line) => `g${line.slice(1)}`),
+  'malformed headerless SFX line');
 
 assert.equal(io.p8Audio(envelope, 'materialized'), materialized,
   'materialized PICO-8 encoding is deterministic');
