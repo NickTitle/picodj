@@ -366,6 +366,46 @@ JavaScript responsibilities are deliberately narrow:
 
 All note edits, profiles, playback, dirty state, and confirmation live in Lua.
 
+### 9.1 Browser project library
+
+M4 keeps `pocket-tracker:project:v2:last-known-good` as the only browser slot
+read or written by file import/export and the GPIO bridge. A separate
+`pocket-tracker:library:v1` record contains at most eight projects, each with
+the newest four complete validated PTP2 envelopes. Project and saved-copy IDs
+are strictly ordered, monotonically increasing positive integers. Adding a
+fifth revision first names the project and exact oldest saved-copy ID in a
+destructive confirmation. After confirmation, the operation rechecks both the
+library and last-known-good source snapshots before evicting that copy in the
+candidate record. Adding a ninth project rejects without eviction.
+The compact deterministic record is capped at exactly 302,213 ASCII characters,
+the schema's worst case with 32 envelopes and ten-digit IDs; oversized input is
+rejected before parsing.
+
+The entire library is one deterministic JSON value. A mutation validates the
+candidate, writes it, reads back the exact string, reparses every retained PTP2
+envelope, and restores the previous value if any check fails. A missing library
+is migrated once from a valid last-known-good slot. An existing malformed root
+is never replaced by migration. If one stored envelope is corrupt but the root
+and IDs remain valid, the UI exposes the older valid revisions from an in-memory
+recovered view without rewriting storage. Recovered libraries are read-only;
+an explicit confirmed library-only reset is the repair path for recovered or
+malformed roots. The reset leaves the last-known-good slot and GPIO untouched
+and writes an empty valid root so migration does not repeat.
+
+Selecting a revision atomically copies that validated envelope into the legacy
+last-known-good slot and does not touch GPIO. The cartridge's existing Load
+action remains the only route from staged bytes to live RAM. Project/revision
+selection uses labelled native selects and buttons, and deletion uses explicit
+confirmation. Mutations compare the current raw library value to their source
+snapshot immediately before writing. Failed read-back restores and verifies the
+exact prior raw value; an unverifiable rollback marks storage integrity
+uncertain and disables further writes. Quota, read-back, corruption, stale
+confirmation, and cancelled-confirmation failures leave the library,
+last-known-good slot, and live cartridge state unchanged. Staging and mutation
+are disabled while a GPIO save or load is active. This first bounded arc assumes
+one active writer tab; concurrent multi-tab editing requires a future Web Lock
+or equivalent cross-document serialization policy.
+
 ## 10. Import/export codecs
 
 ### `.p8` import
@@ -432,6 +472,9 @@ materialized bank is identical to authored bytes.
 - Desktop and touch controls can reach every required M1 action.
 - Authored and materialized exports re-import with their documented equality
   rules.
+- Legacy-slot migration, bounded project/revision limits, corrupt-newest
+  recovery, quota/read-back rollback, staging isolation, and cancelled deletion
+  preserve durable and live state.
 
 ## 12. Budget discipline
 

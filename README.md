@@ -97,6 +97,32 @@ existing staged, checksum-gated commit path. Invalid files and storage faults
 preserve both live and durable state. Bridge frames, undo, snapshots, and
 temporary playback bytes are never serialized.
 
+## Browser project library
+
+The Files panel also provides a browser-only project library. It keeps at most
+eight projects and the newest four validated revisions of each project under
+`pocket-tracker:library:v1`. Adding a fifth revision requires a confirmation
+that names the project and exact saved copy to evict; adding a ninth project is
+rejected without evicting anything. Existing users'
+valid `pocket-tracker:project:v2:last-known-good` slot is copied into the library
+once when no library record exists.
+The deterministic library record is capped at 302,213 ASCII characters, the
+maximum possible for 32 complete envelopes and ten-digit IDs.
+
+The compatibility slot remains unchanged: file import/export and the GPIO
+bridge still use only that last-known-good key. **Stage revision for tracker
+Load** copies a selected validated revision into the compatibility slot but
+does not write live cartridge RAM. Choose **Load** in the tracker to validate
+and commit it. Corrupt newer library copies fall back to older valid revisions
+without silently rewriting storage; recovered or malformed libraries remain
+read-only until an explicit library-only reset. Quota, read-back, stale source,
+and cancelled deletion/rollover failures preserve the library, compatibility
+slot, and live tracker state. Library staging and mutation are disabled during
+an active GPIO save or load.
+Project and revision selection uses labelled native controls for touch and
+keyboard access; every deletion requires confirmation. This first arc supports
+one active writer tab; concurrent multi-tab writes are not serialized.
+
 ## Build and test
 
 PICO-8 must be installed separately. From this directory:

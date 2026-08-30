@@ -157,6 +157,12 @@ export. They must never make the native bytes ambiguous.
   refresh during transfer must leave the previous in-RAM project intact.
 - **PER-008** Format migrations must be explicit and one-way per saved copy;
   unknown future versions must be rejected without mutation.
+- **PER-009** The browser project library must retain multiple checksum-verified
+  projects and a bounded revision history without changing the existing
+  last-known-good key or GPIO/file formats.
+- **PER-010** Choosing a browser-library revision may replace only the durable
+  staging slot. The live project changes only after the existing tracker Load
+  transaction validates and commits that slot.
 
 ### 4.4 Import and export
 
@@ -197,6 +203,9 @@ export. They must never make the native bytes ambiguous.
   or error indicator.
 - **QLT-006** A user must be able to abandon any modal operation with X without
   changing project bytes.
+- **QLT-007** Browser project and revision controls must be labelled native
+  controls usable by keyboard and touch. Project or revision deletion requires
+  an explicit confirmation, and cancellation is a no-op.
 
 ## 5. Platform budgets and constraints
 

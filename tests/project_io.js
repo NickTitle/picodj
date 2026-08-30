@@ -38,6 +38,7 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync('mobile.js', 'utf8'), sandbox);
 const io = sandbox.PocketTrackerProjectIO;
 const files = sandbox.PocketTrackerFileIO;
+const library = sandbox.PocketTrackerLibrary;
 const pumpProjectBridge = raf[0];
 const projectSource = fs.readFileSync('project_io.lua', 'utf8');
 const songSource = fs.readFileSync('song_ui.lua', 'utf8');
@@ -55,6 +56,12 @@ assert.match(indexSource, /Export \.p8 — authored \+ profile/);
 assert.match(indexSource, /Export \.p8 — materialized playback/);
 assert.match(indexSource, /Import JSON \/ \.p8 audio/);
 assert.match(indexSource, /accept="\.json,\.p8,application\/json"/);
+assert.match(indexSource, /<label for="library-project">Project<\/label>/);
+assert.match(indexSource, /<label for="library-revision">Revision<\/label>/);
+assert.match(indexSource, /data-library-action="stage"/);
+assert.match(indexSource, /data-library-action="delete-revision"/);
+assert.match(indexSource, /data-library-action="reset"/);
+assert.match(indexSource, /role="status" aria-live="polite"/);
 assert.match(mobileSource, /Imported authored \.p8\. Choose Load in the tracker\./);
 assert.match(mobileSource, /Imported audio sections as no profile/);
 
@@ -119,6 +126,290 @@ localStorage.setItem(io.key, JSON.stringify(corruptRecord));
 assert.equal(io.loadLastKnownGood(), null, 'corrupt stored envelope is rejected');
 assert.equal(io.storeLastKnownGood(envelope), true);
 const stableRecord = localStorage.getItem(io.key);
+
+function revisionEnvelope(revision, salt = revision) {
+  const bytes = envelope.slice();
+  put16(bytes, 12, revision);
+  bytes[64] = salt & 255;
+  put16(bytes, 8, io.crc16(bytes, 64));
+  put16(bytes, 10, 0);
+  put16(bytes, 10, io.crc16(bytes, 0, bytes.length, 10, 12));
+  return bytes;
+}
+
+assert.equal(library.key, 'pocket-tracker:library:v1');
+assert.equal(library.maxProjects, 8);
+assert.equal(library.maxRevisions, 4);
+assert.equal(library.maxChars, 302213);
+assert.equal(library.parseProjectLibrary(' '.repeat(library.maxChars + 1)), null,
+  'serialized library storage is explicitly bounded');
+const libraryStorage = new MemoryStorage();
+libraryStorage.setItem(io.key, stableRecord);
+const gpioBeforeLibrary = gpio.slice();
+const migrated = library.migrateProjectLibrary(libraryStorage);
+assert.equal(migrated.state, 'migrated');
+assert.equal(migrated.library.projects.length, 1);
+assert.equal(migrated.library.projects[0].revisions.length, 1);
+assert.equal(libraryStorage.getItem(io.key), stableRecord, 'migration preserves the compatibility slot');
+const migratedRaw = libraryStorage.getItem(library.key);
+assert.equal(library.migrateProjectLibrary(libraryStorage).state, 'ready',
+  'migration is one-time when a library already exists');
+assert.equal(libraryStorage.getItem(library.key), migratedRaw, 'repeat migration is byte-stable');
+assert.deepEqual(gpio, gpioBeforeLibrary, 'migration never mutates live GPIO');
+
+const revisions = new Map();
+const rolloverMessages = [];
+for (let revision = 38; revision <= 42; revision++) {
+  const bytes = revisionEnvelope(revision);
+  revisions.set(revision, bytes);
+  assert.equal(io.storeLastKnownGood(bytes, libraryStorage), true);
+  assert.equal(library.addLibraryRevision(1, libraryStorage, (message) => {
+    rolloverMessages.push(message);
+    return true;
+  }), revision - 36);
+}
+let libraryView = library.loadProjectLibrary(libraryStorage);
+assert.equal(libraryView.state, 'ready');
+assert.deepEqual(Array.from(libraryView.library.projects[0].revisions, (item) => item.id), [3, 4, 5, 6],
+  'bounded history retains exactly the four newest revisions');
+assert.deepEqual(rolloverMessages, [
+  'Save this revision and permanently evict strfld track 1 saved copy 1?',
+  'Save this revision and permanently evict strfld track 1 saved copy 2?',
+], 'history rollover confirms the exact project and saved-copy ID');
+const boundedRaw = libraryStorage.getItem(library.key);
+assert.equal(library.addLibraryRevision(1, libraryStorage), 'duplicate');
+assert.equal(libraryStorage.getItem(library.key), boundedRaw, 'duplicate revision is a durable no-op');
+assert.equal(library.stageLibraryRevision(1, 3, libraryStorage), true);
+assert.deepEqual(Array.from(io.loadLastKnownGood(libraryStorage)), Array.from(revisions.get(39)),
+  'selection stages the chosen older revision in the compatibility slot');
+assert.equal(libraryStorage.getItem(library.key), boundedRaw, 'staging does not rewrite the library');
+assert.deepEqual(gpio, gpioBeforeLibrary, 'staging does not mutate live GPIO');
+
+const corruptLibrary = JSON.parse(boundedRaw);
+const corruptRevision = corruptLibrary.projects[0].revisions.at(-1);
+corruptRevision.envelope.envelope = `00${corruptRevision.envelope.envelope.slice(2)}`;
+const corruptRaw = JSON.stringify(corruptLibrary);
+libraryStorage.setItem(library.key, corruptRaw);
+libraryView = library.loadProjectLibrary(libraryStorage);
+assert.equal(libraryView.state, 'recovered');
+assert.deepEqual(Array.from(libraryView.library.projects[0].revisions, (item) => item.id), [3, 4, 5],
+  'a corrupt newest copy exposes the older validated history');
+assert.equal(library.stageLibraryRevision(1, 5, libraryStorage), true);
+assert.equal(libraryStorage.getItem(library.key), corruptRaw,
+  'recovery and staging never silently rewrite corrupt durable data');
+assert.equal(io.storeLastKnownGood(revisionEnvelope(52), libraryStorage), true);
+assert.equal(library.addLibraryRevision(1, libraryStorage, () => true), false,
+  'recovered libraries are read-only until explicit reset');
+assert.equal(library.deleteLibraryRevision(1, 5, libraryStorage), false);
+assert.equal(libraryStorage.getItem(library.key), corruptRaw, 'mutations preserve corrupt recovery evidence');
+
+const deleteStorage = new MemoryStorage();
+deleteStorage.setItem(library.key, boundedRaw);
+deleteStorage.setItem(io.key, stableRecord);
+const cancelledLibrary = deleteStorage.getItem(library.key);
+const cancelledSlot = deleteStorage.getItem(io.key);
+let confirmationCalls = 0;
+let deleteMessage = '';
+assert.equal(library.confirmLibraryDelete('delete-revision', 1, 5, deleteStorage, (message) => {
+  confirmationCalls++;
+  deleteMessage = message;
+  return false;
+}), 'cancelled');
+assert.equal(confirmationCalls, 1);
+assert.equal(deleteMessage,
+  'Delete strfld track 1 saved copy 5? The tracker and browser slot will not change.');
+assert.equal(deleteStorage.getItem(library.key), cancelledLibrary, 'cancelled deletion preserves library');
+assert.equal(deleteStorage.getItem(io.key), cancelledSlot, 'cancelled deletion preserves browser slot');
+assert.deepEqual(gpio, gpioBeforeLibrary, 'cancelled deletion preserves live GPIO');
+assert.deepEqual({...library.libraryDeleteFeedback('cancelled')},
+  {message: 'Deletion cancelled. Nothing changed.', failed: false});
+
+const staleRevisionStorage = new MemoryStorage();
+staleRevisionStorage.setItem(library.key, boundedRaw);
+staleRevisionStorage.setItem(io.key, stableRecord);
+assert.equal(library.confirmLibraryDelete('delete-revision', 1, 5, staleRevisionStorage, () => {
+  staleRevisionStorage.setItem(io.key, io.envelopeRecord(revisionEnvelope(62)));
+  return true;
+}), 'changed', 'revision deletion aborts when its LKG snapshot changes after confirmation');
+assert.equal(staleRevisionStorage.getItem(library.key), boundedRaw,
+  'stale revision deletion preserves every saved revision');
+assert.equal(io.loadLastKnownGood(staleRevisionStorage)[12] |
+  (io.loadLastKnownGood(staleRevisionStorage)[13] << 8), 62,
+  'stale revision deletion does not overwrite the newly changed LKG');
+assert.deepEqual({...library.libraryDeleteFeedback('changed')}, {
+  message: 'Project data changed before deletion. Nothing was deleted or overwritten.', failed: true,
+}, 'stale revision deletion reports an abort rather than success');
+
+const staleProjectStorage = new MemoryStorage();
+staleProjectStorage.setItem(library.key, boundedRaw);
+staleProjectStorage.setItem(io.key, stableRecord);
+let externallyChangedLibrary;
+assert.equal(library.confirmLibraryDelete('delete-project', 1, 0, staleProjectStorage, () => {
+  const changed = JSON.parse(boundedRaw);
+  changed.nextProject++;
+  externallyChangedLibrary = JSON.stringify(changed);
+  staleProjectStorage.setItem(library.key, externallyChangedLibrary);
+  return true;
+}), 'changed', 'project deletion aborts when its library snapshot changes after confirmation');
+assert.equal(staleProjectStorage.getItem(library.key), externallyChangedLibrary,
+  'stale project deletion does not overwrite the externally changed library');
+assert.equal(library.loadProjectLibrary(staleProjectStorage).library.projects.length, 1,
+  'stale project deletion leaves the selected project present');
+assert.deepEqual({...library.libraryDeleteFeedback('changed')}, {
+  message: 'Project data changed before deletion. Nothing was deleted or overwritten.', failed: true,
+}, 'stale project deletion reports an abort rather than success');
+assert.equal(library.resetProjectLibrary(libraryStorage, () => false), 'cancelled');
+assert.equal(libraryStorage.getItem(library.key), corruptRaw, 'cancelled reset preserves recovery evidence');
+assert.equal(library.resetProjectLibrary(libraryStorage, () => true), true);
+assert.equal(library.loadProjectLibrary(libraryStorage).state, 'ready');
+assert.equal(library.loadProjectLibrary(libraryStorage).library.projects.length, 0,
+  'confirmed reset writes an empty valid root');
+assert.notEqual(library.migrateProjectLibrary(libraryStorage).state, 'migrated',
+  'an empty valid root is not silently migrated again');
+assert.equal(io.loadLastKnownGood(libraryStorage)[12] | (io.loadLastKnownGood(libraryStorage)[13] << 8), 52,
+  'library-only reset preserves last-known-good');
+
+const malformedStorage = new MemoryStorage();
+malformedStorage.setItem(io.key, stableRecord);
+malformedStorage.setItem(library.key, '{"format":"pocket-tracker-library","version":1}');
+const malformedRaw = malformedStorage.getItem(library.key);
+assert.equal(library.migrateProjectLibrary(malformedStorage).state, 'invalid');
+assert.equal(malformedStorage.getItem(library.key), malformedRaw,
+  'an invalid existing library is never overwritten by migration');
+assert.equal(malformedStorage.getItem(io.key), stableRecord);
+assert.equal(library.resetProjectLibrary(malformedStorage, () => true), true,
+  'explicit confirmation can reset a malformed library root');
+assert.equal(library.loadProjectLibrary(malformedStorage).state, 'ready');
+assert.equal(malformedStorage.getItem(io.key), stableRecord);
+
+const migrationQuota = new MemoryStorage();
+migrationQuota.setItem(io.key, stableRecord);
+migrationQuota.setItem = function(key, value) {
+  if (key === library.key) throw new Error('quota');
+  MemoryStorage.prototype.setItem.call(this, key, value);
+};
+assert.equal(library.migrateProjectLibrary(migrationQuota).state, 'fault');
+assert.equal(migrationQuota.getItem(library.key), null);
+assert.equal(migrationQuota.getItem(io.key), stableRecord, 'failed migration preserves last-known-good');
+
+const quotaStorage = new MemoryStorage();
+quotaStorage.setItem(io.key, stableRecord);
+assert.equal(library.migrateProjectLibrary(quotaStorage).state, 'migrated');
+assert.equal(io.storeLastKnownGood(revisionEnvelope(50), quotaStorage), true);
+const quotaLibrary = quotaStorage.getItem(library.key);
+const quotaSlot = quotaStorage.getItem(io.key);
+quotaStorage.setItem = function(key, value) {
+  if (key === library.key) throw new Error('quota');
+  MemoryStorage.prototype.setItem.call(this, key, value);
+};
+assert.equal(library.addLibraryRevision(1, quotaStorage), false);
+assert.equal(quotaStorage.getItem(library.key), quotaLibrary, 'quota failure preserves library history');
+assert.equal(quotaStorage.getItem(io.key), quotaSlot, 'quota failure preserves staged slot');
+
+const readBackStorage = new MemoryStorage();
+readBackStorage.setItem(io.key, stableRecord);
+assert.equal(library.migrateProjectLibrary(readBackStorage).state, 'migrated');
+assert.equal(io.storeLastKnownGood(revisionEnvelope(51), readBackStorage), true);
+const readBackLibrary = readBackStorage.getItem(library.key);
+const normalLibraryGet = readBackStorage.getItem.bind(readBackStorage);
+let libraryWrites = 0;
+readBackStorage.setItem = function(key, value) {
+  MemoryStorage.prototype.setItem.call(this, key, value);
+  if (key === library.key) libraryWrites++;
+};
+readBackStorage.getItem = function(key) {
+  const value = normalLibraryGet(key);
+  if (key !== library.key || libraryWrites !== 1 || value === null) return value;
+  libraryWrites++;
+  return `${value.slice(0, -1)}x`;
+};
+assert.equal(library.addLibraryRevision(1, readBackStorage), false);
+assert.equal(readBackStorage.getItem(library.key), readBackLibrary,
+  'library read-back failure restores the exact previous record');
+
+const uncertainStorage = new MemoryStorage();
+uncertainStorage.setItem(io.key, stableRecord);
+assert.equal(library.migrateProjectLibrary(uncertainStorage).state, 'migrated');
+assert.equal(io.storeLastKnownGood(revisionEnvelope(53), uncertainStorage), true);
+let uncertainWrite = 0;
+const uncertainGet = uncertainStorage.getItem.bind(uncertainStorage);
+uncertainStorage.setItem = function(key, value) {
+  if (key === library.key && uncertainWrite++ > 0) throw new Error('rollback failed');
+  MemoryStorage.prototype.setItem.call(this, key, value);
+};
+uncertainStorage.getItem = function(key) {
+  const value = uncertainGet(key);
+  return key === library.key && uncertainWrite === 1 ? `${value.slice(0, -1)}x` : value;
+};
+assert.equal(library.addLibraryRevision(1, uncertainStorage), false);
+assert.equal(library.loadProjectLibrary(uncertainStorage).state, 'uncertain',
+  'unverified rollback disables further library writes');
+assert.equal(library.addLibraryProject(uncertainStorage), false);
+assert.equal(library.resetProjectLibrary(uncertainStorage, () => true), false);
+
+const limitStorage = new MemoryStorage();
+limitStorage.setItem(io.key, stableRecord);
+for (let project = 1; project <= library.maxProjects; project++) {
+  assert.equal(library.addLibraryProject(limitStorage), project);
+}
+const fullLibrary = limitStorage.getItem(library.key);
+assert.equal(library.addLibraryProject(limitStorage), false);
+assert.equal(limitStorage.getItem(library.key), fullLibrary, 'project limit rejects without eviction');
+assert.equal(limitStorage.getItem(io.key), stableRecord);
+
+const outOfOrder = JSON.parse(fullLibrary);
+[outOfOrder.projects[0], outOfOrder.projects[1]] = [outOfOrder.projects[1], outOfOrder.projects[0]];
+assert.equal(library.parseProjectLibrary(JSON.stringify(outOfOrder)), null,
+  'project IDs must be strictly increasing');
+const revisionOrder = JSON.parse(boundedRaw);
+[revisionOrder.projects[0].revisions[0], revisionOrder.projects[0].revisions[1]] =
+  [revisionOrder.projects[0].revisions[1], revisionOrder.projects[0].revisions[0]];
+assert.equal(library.parseProjectLibrary(JSON.stringify(revisionOrder)), null,
+  'revision IDs must be strictly increasing');
+
+const rolloverStorage = new MemoryStorage();
+rolloverStorage.setItem(io.key, io.envelopeRecord(revisionEnvelope(60)));
+rolloverStorage.setItem(library.key, boundedRaw);
+const rolloverRaw = rolloverStorage.getItem(library.key);
+const rolloverSlot = rolloverStorage.getItem(io.key);
+assert.equal(library.addLibraryRevision(1, rolloverStorage, () => false), 'cancelled');
+assert.equal(rolloverStorage.getItem(library.key), rolloverRaw, 'cancelled rollover preserves history');
+assert.equal(rolloverStorage.getItem(io.key), rolloverSlot, 'cancelled rollover preserves source slot');
+assert.equal(library.addLibraryRevision(1, rolloverStorage, () => {
+  rolloverStorage.setItem(io.key, io.envelopeRecord(revisionEnvelope(61)));
+  return true;
+}), 'changed', 'rollover aborts when its source slot changes during confirmation');
+assert.equal(rolloverStorage.getItem(library.key), rolloverRaw);
+rolloverStorage.setItem(io.key, rolloverSlot);
+assert.equal(library.addLibraryRevision(1, rolloverStorage, () => {
+  const changed = JSON.parse(rolloverRaw);
+  changed.nextProject++;
+  rolloverStorage.setItem(library.key, JSON.stringify(changed));
+  return true;
+}), 'changed', 'rollover aborts when its library snapshot changes during confirmation');
+
+const activeLibraryRaw = limitStorage.getItem(library.key);
+const activeSlotRaw = limitStorage.getItem(io.key);
+io.writeFrame(gpio, io.commands.savePage, 70, 0, 0, envelope.length, envelope.slice(0, 112), 5);
+pumpProjectBridge();
+assert.equal(library.projectTransferActive(), true);
+assert.equal(library.stageLibraryRevision(1, 1, limitStorage), false);
+assert.equal(library.addLibraryProject(limitStorage), false);
+assert.equal(library.storeProjectLibrary(library.emptyProjectLibrary(), limitStorage), false);
+assert.equal(limitStorage.getItem(library.key), activeLibraryRaw,
+  'library mutations are blocked during an active GPIO save');
+assert.equal(limitStorage.getItem(io.key), activeSlotRaw);
+io.writeFrame(gpio, io.commands.savePage, 70, 2, 224, envelope.length, envelope.slice(224, 336), 4);
+pumpProjectBridge();
+assert.equal(library.projectTransferActive(), false);
+io.writeFrame(gpio, io.commands.loadRequest, 71, 0, 0, envelope.length);
+pumpProjectBridge();
+assert.equal(library.projectTransferActive(), true);
+assert.equal(library.stageLibraryRevision(1, 1, limitStorage), false,
+  'staging is blocked during an active GPIO load');
+io.writeFrame(gpio, io.commands.done, 71, 0, 0, envelope.length);
+pumpProjectBridge();
+assert.equal(library.projectTransferActive(), false);
 
 const wrongSelection = envelope.slice();
 wrongSelection[56] = 1;
