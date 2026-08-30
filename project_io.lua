@@ -95,13 +95,15 @@ function native_stage(slot)
 end
 
 function native_scan()
+ memset(native_base,0xcc,native_total)
  poke2(native_base,native_sentinel)
  poke2(native_base+native_record,native_sentinel)
  reload(native_base,0,native_total,native_cart)
  if peek2(native_base)==native_sentinel and
     peek2(native_base+native_record)==native_sentinel then return end
  local a,b=native_stage(0),native_stage(1)
- if b and (not a or ((b-a)&0xffff)>0) then return 1,b end
+ local delta=a and b and ((b-a)&0xffff)
+ if b and (not a or delta>0) then return 1,b end
  if a then return 0,a end
  return -1,0
 end
@@ -122,6 +124,7 @@ function native_save()
  local expected=native_base+(1-target)*native_record+8
  memcpy(expected,base+8,io_envelope_size)
  cstore(target*native_record,base,native_record,native_cart)
+ memset(base,0xcc,native_record)
  poke2(base,native_sentinel)
  reload(base,target*native_record,native_record,native_cart)
  if peek2(base)==native_sentinel then return io_fail("data cart write cancelled") end

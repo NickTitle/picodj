@@ -31,26 +31,37 @@ end
 
 native_real_cstore=cstore
 native_real_reload=reload
-native_fault_write=false
-native_skip_reload=false
+native_cstore_calls=0
+native_reload_calls=0
+native_cstore_fault_call=0
+native_reload_fault_call=0
+native_cstore_fault=nil
+native_reload_fault=nil
 
 -- Native calls deliberately return nil. The production adapter must determine
 -- success from sentinel-prefill plus record and envelope validation.
 function cstore(destination,source,length,filename)
- native_real_cstore(destination,source,length,filename)
- if native_fault_write and length==native_record then
-  local addr=source+9
-  local old=peek(addr)
-  poke(addr,old^^1)
-  native_real_cstore(destination,source,length,filename)
-  poke(addr,old)
+ native_cstore_calls+=1
+ if native_cstore_calls==native_cstore_fault_call then
+  if native_cstore_fault=="noop" then return end
+  if native_cstore_fault=="partial" then
+   native_real_cstore(destination,source,16,filename)
+   return
+  end
  end
+ native_real_cstore(destination,source,length,filename)
 end
 
 function reload(destination,source,length,filename)
- if not native_skip_reload then
-  native_real_reload(destination,source,length,filename)
+ native_reload_calls+=1
+ if native_reload_calls==native_reload_fault_call then
+  if native_reload_fault=="noop" then return end
+  if native_reload_fault=="partial" then
+   native_real_reload(destination,source,16,filename)
+   return
+  end
  end
+ native_real_reload(destination,source,length,filename)
 end
 
 failures=0
@@ -92,6 +103,39 @@ function write_record(slot,generation,seed,profile)
  native_real_cstore(slot*native_record,base,native_record,native_cart)
 end
 
+function reset_cart(seed)
+ memset(native_base,0,native_total)
+ native_real_cstore(0,native_base,native_total,native_cart)
+ write_record(0,1,seed,0)
+end
+
+function record_matches(slot,generation,seed)
+ local base=native_base+slot*native_record
+ memset(base,0xcc,native_record)
+ native_real_reload(base,slot*native_record,native_record,native_cart)
+ if native_stage(slot)!=generation then return false end
+ for i=0,bank_size-1 do
+  if peek(bank_stage_base+i)!=(i*37+seed)&0xff then return false end
+ end
+ return true
+end
+
+function fault_save(label,cstore_fault,reload_fault)
+ reset_cart(61)
+ project(67,0,67,label,"fault source") undo_owner="sfx"
+ native_cstore_calls=0 native_reload_calls=0
+ native_cstore_fault_call=cstore_fault and 1 or 0
+ native_reload_fault_call=reload_fault and 2 or 0
+ native_cstore_fault=cstore_fault native_reload_fault=reload_fault
+ check(not native_save(),label.." rejected")
+ native_cstore_fault_call=0 native_reload_fault_call=0
+ native_cstore_fault=nil native_reload_fault=nil
+ check(bank_matches(67) and bank_dirty and bank_revision==67 and
+  io_project_name==label and io_project_source=="fault source" and
+  undo_owner=="sfx",label.." preserves live project")
+ check(record_matches(0,1,61),label.." preserves prior record")
+end
+
 native_test_init=_init
 function _init()
  native_test_init()
@@ -112,20 +156,17 @@ function _init()
  local slot,generation=native_scan()
  check(slot==0 and generation==1,"first save selects record a")
 
- -- A damaged write to B must fail read-back without losing A or live state.
- project(23,0,42,"raw project","profile none")
- undo_owner="sfx" native_fault_write=true
- check(not native_save() and notice=="data cart read-back failed",
-  "read-back mismatch rejected")
- native_fault_write=false
- check(bank_matches(23) and bank_dirty and bank_revision==42 and
-  bank_profile_kind==0 and io_project_name=="raw project" and
-  io_project_source=="profile none" and undo_owner=="sfx",
-  "failed save preserves live project")
- slot,generation=native_scan()
- check(slot==0 and generation==1,"failed write preserves rollback record")
+ -- Missing, partial, and unconfirmed writes preserve live and durable state.
+ fault_save("cstore no-op","noop")
+ fault_save("partial write/read","partial","partial")
+ fault_save("read-back no-op",nil,"noop")
 
  -- Retry writes B, then the newest complete profile-none project loads.
+ memset(native_base,0,native_total)
+ native_real_cstore(0,native_base,native_total,native_cart)
+ project(11,1,37,"track one","fixture source")
+ check(native_save(),"restore track-one record a")
+ project(23,0,42,"raw project","profile none") undo_owner="sfx"
  audition_active=true
  check(native_save(),"second save retry")
  check(not audition_active and stop_audition_calls==1,
@@ -161,7 +202,11 @@ function _init()
   io_project_source=="keep me" and undo_owner=="song",
   "invalid load preserves live project")
 
- -- Modular generation ordering handles wrap and resolves exact ties to A.
+ -- Modular generation ordering handles alternation, wrap, and exact ties.
+ write_record(0,3,29,1)
+ write_record(1,2,37,0)
+ slot,generation=native_scan()
+ check(slot==0 and generation==3,"a3 is newer than b2")
  write_record(0,0xffff,31,1)
  write_record(1,0,47,0)
  slot,generation=native_scan()
@@ -169,21 +214,38 @@ function _init()
  project(88,1,88,"temporary","temporary")
  check(native_load() and bank_matches(47) and bank_profile_kind==0,
   "wrapped newest record loads")
+ write_record(0,0,41,1)
+ write_record(1,0xffff,43,0)
+ slot,generation=native_scan()
+ check(slot==0 and generation==0,"reverse wrap chooses zero after ffff")
  write_record(0,9,53,1)
  write_record(1,9,59,0)
  slot,generation=native_scan()
  check(slot==0 and generation==9,"generation tie deterministically chooses a")
+ write_record(0,0,61,1)
+ write_record(1,0x8000,63,0)
+ slot,generation=native_scan()
+ check(slot==0 and generation==0,"generation half-range chooses a")
+ memset(native_base,0,native_total)
+ native_real_cstore(0,native_base,native_total,native_cart)
+ for i=1,4 do
+  project(70+i,0,i,"save "..i,"alternation")
+  check(native_save(),"sequential save "..i)
+  slot,generation=native_scan()
+  check(slot==(i-1)%2 and generation==i,"sequential slot "..i)
+ end
 
  -- A cancelled reload leaves both sentinels untouched and changes nothing.
  project(83,0,83,"cancel live","cancel source") undo_owner="sfx"
- native_skip_reload=true
+ native_reload_calls=0 native_reload_fault_call=1 native_reload_fault="noop"
  check(not native_save() and notice=="data cart missing/cancelled",
   "cancelled save detected without return values")
  check(bank_matches(83) and bank_dirty and bank_revision==83 and
   undo_owner=="sfx","cancelled save preserves live project")
+ native_reload_calls=0
  check(not native_load() and notice=="data cart missing/cancelled",
   "cancelled load detected without return values")
- native_skip_reload=false
+ native_reload_fault_call=0 native_reload_fault=nil
  check(bank_matches(83) and bank_dirty and bank_revision==83 and
   io_project_name=="cancel live" and io_project_source=="cancel source" and
   undo_owner=="sfx","cancelled load preserves live project")

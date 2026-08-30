@@ -457,17 +457,23 @@ writes only the older or invalid record and succeeds only after complete
 read-back validation; load chooses the newest valid modular generation and
 falls back to the older valid record. Native `cstore()` and `reload()` return
 values are not assumed: sentinel-prefill distinguishes an untouched
-missing/cancelled operation from loaded data before CRC validation.
+missing/cancelled operation from loaded data before CRC validation. The full
+scan scratch and full read-back target are poisoned before reload, so partial
+I/O cannot validate stale intended RAM. Modular ordering uses PICO-8's signed
+low-16-bit delta: only `1..0x7fff` selects B; ties and `0x8000` select A.
 
 The release gate is deliberately re-baselined for completed M3: the calibrated
 probe is 1,024 tokens, requiring production at or below **7,168 / 8,192** and
 preserving at least 1,024 hard-limit tokens for separately budgeted M4 work.
 Raw PXA remains capped at 65,535 bytes and compressed PXA at 12,288 bytes.
 
-The accepted five-file graph measures **6,943 tokens**, leaving 1,249 tokens
-below the hard ceiling, and 41,224 source bytes. The exported PXA header records
-41,239 raw bytes and 11,398 compressed bytes. Two same-basename fresh exports
+The accepted five-file graph measures **6,960 tokens**, leaving 208 tokens
+below the M3 gate and 1,232 below the hard ceiling, and 41,327 source bytes.
+The exported PXA header records 41,342 raw bytes and 11,427 compressed bytes.
+Two same-basename fresh exports
 are byte-identical; `tracker.html` remains SHA-256
 `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
 and regenerated `tracker.js` is SHA-256
-`a3ba79846f18c551365323988ec3e4cdf8b9a06f079ab02da6ae9479b2af56ae`.
+`f65b3f8297f4adea2feb4794da41a657bdda1fcb45a7c6de944c734f968c4690`.
+The production-shaped runtime retained 600 frames at 60 FPS with no bad frame
+and peak `stat(1)` of 0.0031.
