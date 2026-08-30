@@ -576,6 +576,16 @@ function confirmLibraryDelete(action, projectId, revisionId, storage = localStor
     deleteLibraryRevision(projectId, revisionId, storage);
 }
 
+function libraryDeleteFeedback(result) {
+  if (result === 'cancelled') return {message: 'Deletion cancelled. Nothing changed.', failed: false};
+  if (result === 'changed') return {
+    message: 'Project data changed before deletion. Nothing was deleted or overwritten.', failed: true,
+  };
+  return result ? {
+    message: 'Deleted from the project library. The tracker and browser slot are unchanged.', failed: false,
+  } : {message: 'Could not delete that item. Project data is unchanged.', failed: true};
+}
+
 function resetProjectLibrary(storage = localStorage, confirmAction = globalThis.confirm) {
   if (projectTransferActive() || uncertainLibraryStorage.has(storage)) return false;
   let snapshot;
@@ -737,6 +747,7 @@ globalThis.PocketTrackerLibrary = Object.freeze({
   deleteLibraryProject,
   deleteLibraryRevision,
   confirmLibraryDelete,
+  libraryDeleteFeedback,
   resetProjectLibrary,
   projectTransferActive,
 });
@@ -942,13 +953,9 @@ projectLibraryPanel?.addEventListener('click', (event) => {
     return;
   }
   const result = confirmLibraryDelete(action, projectId, revisionId);
-  if (result === 'cancelled') {
-    setLibraryStatus('Deletion cancelled. Nothing changed.');
-    return;
-  }
-  renderProjectLibrary();
-  setLibraryStatus(result ? 'Deleted from the project library. The tracker and browser slot are unchanged.' :
-    'Could not delete that item. Project data is unchanged.', !result);
+  if (result !== 'cancelled') renderProjectLibrary();
+  const feedback = libraryDeleteFeedback(result);
+  setLibraryStatus(feedback.message, feedback.failed);
 });
 
 projectImport?.addEventListener('change', async () => {

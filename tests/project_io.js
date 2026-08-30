@@ -221,6 +221,43 @@ assert.equal(deleteMessage,
 assert.equal(deleteStorage.getItem(library.key), cancelledLibrary, 'cancelled deletion preserves library');
 assert.equal(deleteStorage.getItem(io.key), cancelledSlot, 'cancelled deletion preserves browser slot');
 assert.deepEqual(gpio, gpioBeforeLibrary, 'cancelled deletion preserves live GPIO');
+assert.deepEqual({...library.libraryDeleteFeedback('cancelled')},
+  {message: 'Deletion cancelled. Nothing changed.', failed: false});
+
+const staleRevisionStorage = new MemoryStorage();
+staleRevisionStorage.setItem(library.key, boundedRaw);
+staleRevisionStorage.setItem(io.key, stableRecord);
+assert.equal(library.confirmLibraryDelete('delete-revision', 1, 5, staleRevisionStorage, () => {
+  staleRevisionStorage.setItem(io.key, io.envelopeRecord(revisionEnvelope(62)));
+  return true;
+}), 'changed', 'revision deletion aborts when its LKG snapshot changes after confirmation');
+assert.equal(staleRevisionStorage.getItem(library.key), boundedRaw,
+  'stale revision deletion preserves every saved revision');
+assert.equal(io.loadLastKnownGood(staleRevisionStorage)[12] |
+  (io.loadLastKnownGood(staleRevisionStorage)[13] << 8), 62,
+  'stale revision deletion does not overwrite the newly changed LKG');
+assert.deepEqual({...library.libraryDeleteFeedback('changed')}, {
+  message: 'Project data changed before deletion. Nothing was deleted or overwritten.', failed: true,
+}, 'stale revision deletion reports an abort rather than success');
+
+const staleProjectStorage = new MemoryStorage();
+staleProjectStorage.setItem(library.key, boundedRaw);
+staleProjectStorage.setItem(io.key, stableRecord);
+let externallyChangedLibrary;
+assert.equal(library.confirmLibraryDelete('delete-project', 1, 0, staleProjectStorage, () => {
+  const changed = JSON.parse(boundedRaw);
+  changed.nextProject++;
+  externallyChangedLibrary = JSON.stringify(changed);
+  staleProjectStorage.setItem(library.key, externallyChangedLibrary);
+  return true;
+}), 'changed', 'project deletion aborts when its library snapshot changes after confirmation');
+assert.equal(staleProjectStorage.getItem(library.key), externallyChangedLibrary,
+  'stale project deletion does not overwrite the externally changed library');
+assert.equal(library.loadProjectLibrary(staleProjectStorage).library.projects.length, 1,
+  'stale project deletion leaves the selected project present');
+assert.deepEqual({...library.libraryDeleteFeedback('changed')}, {
+  message: 'Project data changed before deletion. Nothing was deleted or overwritten.', failed: true,
+}, 'stale project deletion reports an abort rather than success');
 assert.equal(library.resetProjectLibrary(libraryStorage, () => false), 'cancelled');
 assert.equal(libraryStorage.getItem(library.key), corruptRaw, 'cancelled reset preserves recovery evidence');
 assert.equal(library.resetProjectLibrary(libraryStorage, () => true), true);
