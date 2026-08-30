@@ -210,7 +210,7 @@ export. They must never make the native bytes ambiguous.
 | Persistent cart data | 256 bytes at `0x5e00` | Preferences/recovery only; full bank requires another persistence path. |
 | Browser GPIO | 128 bytes at `0x5f80` | Full projects require a multi-frame protocol. |
 | Code | 8,192 tokens; 65,535 characters | Track token, character, and compressed-size budgets in CI. |
-| Exported code | 15,360 compressed bytes | Keep UI/data helpers compact and measure real HTML/PNG export. |
+| Exported code | 12,288 compressed bytes | Preserve the post-M3 release reserve and measure real HTML/PNG export. |
 | CPU | 4M VM instructions/sec | Bound work per frame; transport and checksums advance incrementally. |
 
 Source for platform limits and audio behavior: the

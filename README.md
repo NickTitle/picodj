@@ -13,7 +13,8 @@ coverage; it is not included in the production cartridge.
 - The cartridge opens directly in SONG. Up/Down chooses pattern `00`–`3f`,
   Left/Right chooses channel, and O opens the selected channel's native SFX.
 - Hold O from either native screen opens the project palette for playback,
-  save, and load. Up/Down chooses, O activates, and X closes.
+  browser-slot save/load, and fixed data-cart save/load. Up/Down chooses, O
+  activates, and X closes.
 - Hold X in SONG for SFX/mute/flow edits, session-only audition mix,
   one-level undo/redo, and native playback. On the mix row, Left/Right stages
   all, mute selected channel, or solo selected channel; O applies and X
@@ -47,6 +48,17 @@ after browser-storage read-back succeeds; load stages every page and commits
 only after the frame, envelope, and bank checksums agree. JSON/WAV actions
 inside the cartridge remain disabled because the older 78-byte format cannot
 safely represent native edits.
+
+Native **Save data cart** / **Load data cart** use the shipped, pre-existing
+`pocket-tracker-data.p8` slot. Two 4,680-byte journal records alternate inside
+the cart's writable data: an 8-byte magic/generation/CRC wrapper followed by
+the exact 4,672-byte PTP2 envelope. Save overwrites only the older or invalid
+record and reports success only after reloading and fully validating the new
+generation. Load chooses the newest valid modulo-16-bit generation, falls back
+when the newest record is corrupt, stages the complete project, and commits it
+atomically. Missing, cancelled, invalid, and read-back-failed operations leave
+the authored project and the prior rollback record intact; attempted I/O may
+stop playback or preview.
 
 The row clipboard holds 1–32 exact authored words, is reusable across
 conventional SFX slots, and lasts until the next copy or reboot. It is internal
@@ -102,6 +114,11 @@ env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 node tests/mobile_hold.js
 node tests/project_io.js
 node tests/file_io.js
+
+cp pocket-tracker-data.p8 tests/fixtures/pocket-tracker-data-test.p8
+timeout 30s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+  /path/to/pico8 -run tests/native_store.p8
+rm tests/fixtures/pocket-tracker-data-test.p8
 ```
 
 `tracker.html` and `tracker.js` are generated. `audio_bank.lua` is the native
@@ -133,6 +150,6 @@ and checksums are documented in
 `docs/PICO8_027_WAVEFORM_FIXTURE.md`.
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
-plus a calibrated 1,639-token probe. Its pass marker gates the shipped cart at
-or below 6,553 tokens; release verification strengthens that bound to 6,538.
-This preserves the documented 20% reserve against PICO-8's 8,192-token ceiling.
+plus a calibrated 1,024-token probe. Its pass marker gates the completed M3
+cart at or below 7,168 tokens, preserving at least 1,024 tokens against
+PICO-8's 8,192-token ceiling for the separately budgeted M4 work.

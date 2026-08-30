@@ -285,13 +285,30 @@ Standalone PICO audio export offers two labelled modes:
 `cartdata()` stores only preferences and recovery metadata. A complete project
 uses `cstore()` and is read with `reload()`.
 
-Recommended safe flow:
+The fixed M3 slot is the shipped, pre-existing `pocket-tracker-data.p8`. Its
+first 9,360 writable bytes contain two records: A at `0x0000..0x1247` and B at
+`0x1248..0x248f`. Each record is an 8-byte `PTJ1` wrapper (modulo-16-bit
+generation and CRC-16/CCITT) followed by the unchanged 4,672-byte PTP2
+envelope. Runtime scratch `0xa604..0xca93` holds both records and is outside
+the canonical bank, profile, history, clipboard, GPIO, and export surfaces.
+
+Safe flow:
 
 1. Stop audio and restore temporary transforms.
 2. Construct metadata and compute the bank/envelope checksum.
-3. Write a dedicated, pre-existing project/data cart through `cstore()`.
-4. Reload its data into staging memory.
-5. Recompute the checksum and show success only on equality.
+3. Sentinel-prefill scratch and `reload()` both records; validate wrapper,
+   envelope, and bank CRCs and choose the newest modular generation.
+4. Write only the older or invalid record through `cstore()` at generation+1.
+5. Sentinel-prefill that in-RAM target, reload it, and show success only when
+   wrapper CRC, PTP2 CRC, bank CRC, generation, and intended envelope agree.
+
+Native APIs are treated as procedures: no boolean return is assumed from
+`cstore()` or `reload()`. An untouched sentinel identifies a missing/cancelled
+operation. Load repeats complete validation, falls back from a corrupt newest
+record to the older valid record, stages through the shared header/bank
+regions, and reuses the browser path's atomic commit helper. Both-invalid and
+all failed-save paths preserve live authored state, metadata, dirty/revision
+and history; attempted I/O is allowed to leave transport stopped.
 
 Writing the currently running tracker cart is supported only behind a named,
 explicit confirmation because it ties the save to that cartridge version.

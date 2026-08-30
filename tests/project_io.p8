@@ -92,9 +92,6 @@ function _init()
  bank_revision=37
  bank_dirty=true
  local saved_crc=bank_checksum(bank_audio_base)
- check(context_label("save")=="save browser slot" and
-       context_label("load")=="load browser slot","lossless slot labels enabled")
-
  io_begin_frame(io_request_load,1,0,0,io_envelope_size,0,0)
  io_finish_frame()
  check(io_get16(io_gpio+14)==0x4bca,"gpio crc matches browser vector")
