@@ -16,6 +16,8 @@ end
 
 function save_song() save_calls+=1 end
 function load_song() load_calls+=1 end
+function native_save() cart_save_calls+=1 end
+function native_load() cart_load_calls+=1 end
 function toggle_song() play_calls+=1 end
 function song_open_sfx() sfx_open_calls+=1 app_view="sfx" end
 function song_return_from_sfx() return_calls+=1 app_view="song" end
@@ -33,7 +35,7 @@ function reset_fixture(view)
  playing,play_follow=false,true
  song_channel=1
  song_mix,song_mix_channel,song_mix_stage=0,0,0
- save_calls,load_calls,play_calls=0,0,0
+ save_calls,load_calls,cart_save_calls,cart_load_calls,play_calls=0,0,0,0,0
  sfx_open_calls,return_calls,edit_calls,rest_calls=0,0,0,0
  mix_apply_calls=0
  row_op=nil
@@ -69,6 +71,12 @@ function _init()
  check(context_item==2,"project menu reaches save")
  update_context_menu(false,false,true,false,false,false,false,false)
  check(save_calls==1 and context_menu==nil,"project save action")
+ reset_fixture("song") open_context_menu("start") release_context_gate()
+ context_item=4 context_apply("save data cart")
+ check(cart_save_calls==1 and context_menu==nil,"data cart save route")
+ action_gate=false open_context_menu("start") release_context_gate()
+ context_item=5 context_apply("load data cart")
+ check(cart_load_calls==1 and context_menu==nil,"data cart load route")
 
  -- Hold X opens the current native context without leaking a back action.
  reset_fixture("song")

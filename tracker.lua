@@ -1,7 +1,7 @@
 -- shared six-button input and menus for the native tracker
 
 hold_frames=18
-start_menu=split"play,save,load"
+start_menu=split"play,save browser slot,load browser slot,save data cart,load data cart"
 
 function say() end
 
@@ -29,8 +29,10 @@ end
 function context_apply(name)
  if context_menu=="start" then
   if name=="play" then toggle_song()
-  elseif name=="save" then save_song()
-  else load_song(true) end
+  elseif name=="save browser slot" then save_song()
+  elseif name=="load browser slot" then load_song(true)
+  elseif name=="save data cart" then native_save()
+  else native_load() end
  elseif context_menu=="song" then
   if context_item<=3 then song_begin_edit(name)
   elseif name=="mix" then song_mix_apply()

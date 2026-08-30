@@ -32,20 +32,27 @@ clamps at their native bounds; SFX values wrap from `3f` to `00`.
 
 ## Native project I/O
 
-M1.4A uses one namespaced browser last-known-good slot as the safe reversible
-default while the native data-cart destination remains undecided. It stores the
+The browser uses one namespaced last-known-good slot and native PICO-8 uses the
+fixed, visible, pre-existing `pocket-tracker-data.p8` slot. Both store the
 complete 4,608-byte authored bank plus project name, revision, one exact
 profile-none or Track-1 profile tuple, and source selection in a fixed
 checksummed v2 envelope. Legacy JSON
 and WAV actions remain disabled; the old 78-byte sketch format is never used by
 save or load.
 
+The native slot keeps two journal records with modulo-16-bit generations,
+wrapper/envelope/bank CRC validation, older-record overwrite, and mandatory
+post-write read-back. Corrupt-newest loads fall back to the prior valid record;
+missing/cancelled/both-invalid operations do not change the current project.
+
 The browser re-imports its own authored `.p8` when complete unique audio
 sections and the exact checksummed PTP2 sidecar are present. Headerless generic
 and materialized carts with unique valid audio sections become profile-none,
 using deterministic filename metadata and no inferred external Lua transform.
-Malformed/duplicate sidecars reject. Native fixed-slot data-cart persistence is
-the remaining separate M3 decision.
+Malformed/duplicate sidecars reject.
+
+- **Revisit:** a project picker, additional revisions, naming UI, and recovery
+  management belong to M4 and must preserve the same staged/atomic boundary.
 
 ## Legacy sketch
 

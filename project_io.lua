@@ -7,6 +7,9 @@ io_project_source="e7e97ab track 1"
 
 io_page_save,io_ack,io_page_load,io_commit_load=1,2,3,4
 io_done,io_error,io_request_load=5,6,7
+native_cart="pocket-tracker-data.p8"
+native_base,native_record,native_total=0xa604,0x1248,0x2490
+native_sentinel=0xa55a
 
 function io_crc_byte(crc,value)
  crc=(crc^^(value<<8))&0xffff
@@ -74,6 +77,72 @@ function io_envelope_byte(offset)
  return peek(bank_audio_base+offset-io_header_size)
 end
 
+function native_crc(base)
+ local crc=0xffff
+ for i=0,native_record-1 do
+  if i<6 or i>7 then crc=io_crc_byte(crc,peek(base+i)) end
+ end
+ return crc
+end
+
+function native_stage(slot)
+ local base=native_base+slot*native_record
+ if peek2(base)!=0x5450 or peek2(base+2)!=0x314a then return false end
+ if native_crc(base)!=io_get16(base+6) then return false end
+ memcpy(io_header,base+8,io_header_size)
+ memcpy(bank_stage_base,base+8+io_header_size,bank_size)
+ return io_envelope_valid() and io_get16(base+4)
+end
+
+function native_scan()
+ poke2(native_base,native_sentinel)
+ poke2(native_base+native_record,native_sentinel)
+ reload(native_base,0,native_total,native_cart)
+ if peek2(native_base)==native_sentinel and
+    peek2(native_base+native_record)==native_sentinel then return end
+ local a,b=native_stage(0),native_stage(1)
+ if b and (not a or ((b-a)&0xffff)>0) then return 1,b end
+ if a then return 0,a end
+ return -1,0
+end
+
+function native_save()
+ if io_mode!="idle" then return io_fail("project i/o busy") end
+ io_stop_authored()
+ local slot,generation=native_scan()
+ if not slot then return io_fail("data cart missing/cancelled") end
+ local target=slot<0 and 0 or 1-slot
+ generation=(generation+1)&0xffff
+ if not io_prepare_envelope() then return io_fail("data cart prepare failed") end
+ local base=native_base+target*native_record
+ poke2(base,0x5450) poke2(base+2,0x314a) io_put16(base+4,generation)
+ memcpy(base+8,io_header,io_header_size)
+ memcpy(base+8+io_header_size,bank_audio_base,bank_size)
+ io_put16(base+6,native_crc(base))
+ local expected=native_base+(1-target)*native_record+8
+ memcpy(expected,base+8,io_envelope_size)
+ cstore(target*native_record,base,native_record,native_cart)
+ poke2(base,native_sentinel)
+ reload(base,target*native_record,native_record,native_cart)
+ if peek2(base)==native_sentinel then return io_fail("data cart write cancelled") end
+ if native_stage(target)!=generation then return io_fail("data cart read-back failed") end
+ for i=0,io_envelope_size-1 do
+  if peek(base+8+i)!=peek(expected+i) then return io_fail("data cart read-back failed") end
+ end
+ bank_mark_clean() undo_owner=nil song_error=nil say("data cart saved") return true
+end
+
+function native_load()
+ if io_mode!="idle" then return io_fail("project i/o busy") end
+ io_stop_authored()
+ local slot=native_scan()
+ if not slot then return io_fail("data cart missing/cancelled") end
+ if slot<0 then return io_fail("data cart invalid") end
+ native_stage(slot)
+ if not io_commit_stage() then return io_fail("data cart commit failed") end
+ song_error=nil say("data cart loaded") return true
+end
+
 function io_begin_frame(command,id,sequence,offset,total,length,flags)
  memset(io_gpio,0,128)
  poke2(io_gpio,0x5450) poke2(io_gpio+2,0x324b)
@@ -109,10 +178,10 @@ function io_frame_valid(command)
 end
 
 function io_fail(text,code)
- io_mode="idle"
- io_emit_control(io_error,code or 1)
+ if code then io_mode="idle" io_emit_control(io_error,code) end
  song_error=text
  say(text)
+ return false
 end
 
 function io_stop_authored()
@@ -202,18 +271,20 @@ function io_envelope_valid()
  return (crc&0xffff)==(expected&0xffff)
 end
 
+function io_commit_stage()
+ if not bank_stage_commit(io_get16(io_header+8)) then return false end
+ bank_profile_kind=peek(io_header+14)
+ io_project_name=io_get_text(16) io_project_source=io_get_text(32)
+ song_pattern=peek(io_header+56) bank_revision=io_get16(io_header+12)
+ bank_dirty=false bank_snapshot_valid=false undo_owner=nil
+ return true
+end
+
 function io_commit_loaded()
  if not io_load_complete or not io_envelope_valid() then
   io_fail("load checksum failed",7) return
  end
- local expected=io_get16(io_header+8)
- if not bank_stage_commit(expected) then io_fail("load commit failed",8) return end
- bank_profile_kind=peek(io_header+14)
- io_project_name=io_get_text(16) io_project_source=io_get_text(32)
- song_pattern=peek(io_header+56)
- bank_revision=io_get16(io_header+12)
- bank_dirty=false bank_snapshot_valid=false
- undo_owner=nil
+ if not io_commit_stage() then io_fail("load commit failed",8) return end
  io_mode="idle"
  io_emit_control(io_done,0)
  song_error=nil
@@ -259,11 +330,4 @@ function _update60()
  project_io_update()
  if io_mode!="idle" then return end
  project_legacy_update60()
-end
-
-project_legacy_context_label=context_label
-function context_label(name)
- if name=="save" then return "save browser slot" end
- if name=="load" then return "load browser slot" end
- return project_legacy_context_label(name)
 end
