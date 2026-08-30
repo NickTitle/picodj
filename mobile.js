@@ -3,6 +3,10 @@ const fileToggle = document.querySelector('#file-toggle');
 const filePanel = document.querySelector('#file-panel');
 const fileStatus = document.querySelector('#file-status');
 const projectImport = document.querySelector('#project-import');
+const libraryProject = document.querySelector('#library-project');
+const libraryRevision = document.querySelector('#library-revision');
+const libraryStatus = document.querySelector('#project-library-status');
+const projectLibraryPanel = document.querySelector('#project-library');
 
 const trackerSurfaceSelector = [
   '#p8_frame_0',
@@ -55,12 +59,17 @@ function download(blob, filename) {
 }
 
 const projectStoreKey = 'pocket-tracker:project:v2:last-known-good';
+const projectLibraryKey = 'pocket-tracker:library:v1';
+const projectLibraryMaxProjects = 8;
+const projectLibraryMaxRevisions = 4;
+const projectLibraryMaxChars = 302213;
 const projectEnvelopeSize = 4672;
 const projectPayloadSize = 112;
 const projectCommands = {savePage: 1, ack: 2, loadPage: 3, loadCommit: 4, done: 5, error: 6, loadRequest: 7};
 let projectSaveTransfer = null;
 let projectSaveLastAck = null;
 let projectLoadTransfer = null;
+const uncertainLibraryStorage = new WeakSet();
 
 function crc16Byte(crc, value) {
   crc ^= value << 8;
@@ -339,6 +348,253 @@ function loadLastKnownGood(storage = localStorage) {
   try { return parseEnvelopeRecord(storage.getItem(projectStoreKey)); } catch (_) { return null; }
 }
 
+function emptyProjectLibrary() {
+  return {format: 'pocket-tracker-library', version: 1, nextProject: 1, projects: []};
+}
+
+function envelopeValue(bytes) { return JSON.parse(envelopeRecord(bytes)); }
+
+function parseEnvelopeValue(value) {
+  if (!exactKeys(value, ['format', 'version', 'envelope'])) return null;
+  return parseEnvelopeRecord(JSON.stringify(value));
+}
+
+function validLibraryId(value) {
+  return Number.isInteger(value) && value > 0 && value <= 0x7fffffff;
+}
+
+function parseProjectLibrary(raw) {
+  if (typeof raw !== 'string' || raw.length > projectLibraryMaxChars) return null;
+  let value;
+  try { value = JSON.parse(raw); } catch (_) { return null; }
+  if (!exactKeys(value, ['format', 'version', 'nextProject', 'projects']) ||
+      value.format !== 'pocket-tracker-library' || value.version !== 1 ||
+      !validLibraryId(value.nextProject) || !Array.isArray(value.projects) ||
+      value.projects.length > projectLibraryMaxProjects) return null;
+  const projects = [];
+  const projectIds = new Set();
+  let maxProject = 0, previousProject = 0, recovered = false;
+  for (const project of value.projects) {
+    if (!exactKeys(project, ['id', 'nextRevision', 'revisions']) ||
+        !validLibraryId(project.id) || projectIds.has(project.id) ||
+        !validLibraryId(project.nextRevision) || !Array.isArray(project.revisions) ||
+        project.revisions.length < 1 || project.revisions.length > projectLibraryMaxRevisions ||
+        project.id <= previousProject) return null;
+    projectIds.add(project.id);
+    previousProject = project.id;
+    maxProject = Math.max(maxProject, project.id);
+    const revisions = [];
+    const revisionIds = new Set();
+    let maxRevision = 0, previousRevision = 0;
+    for (const revision of project.revisions) {
+      if (!exactKeys(revision, ['id', 'envelope']) || !validLibraryId(revision.id) ||
+          revisionIds.has(revision.id) || revision.id <= previousRevision) return null;
+      revisionIds.add(revision.id);
+      previousRevision = revision.id;
+      maxRevision = Math.max(maxRevision, revision.id);
+      const bytes = parseEnvelopeValue(revision.envelope);
+      if (bytes) revisions.push({id: revision.id, envelope: revision.envelope});
+      else recovered = true;
+    }
+    if (project.nextRevision <= maxRevision) return null;
+    if (revisions.length) projects.push({id: project.id, nextRevision: project.nextRevision, revisions});
+    else recovered = true;
+  }
+  if (value.nextProject <= maxProject) return null;
+  return {library: {format: value.format, version: value.version,
+    nextProject: value.nextProject, projects}, recovered};
+}
+
+function projectLibraryRecord(library) { return JSON.stringify(library); }
+
+function loadProjectLibrary(storage = localStorage) {
+  if (uncertainLibraryStorage.has(storage)) {
+    return {state: 'uncertain', library: emptyProjectLibrary(), recovered: false, raw: null};
+  }
+  let raw;
+  try { raw = storage.getItem(projectLibraryKey); } catch (_) {
+    return {state: 'fault', library: emptyProjectLibrary(), recovered: false, raw: null};
+  }
+  if (raw === null || raw === undefined) {
+    return {state: 'missing', library: emptyProjectLibrary(), recovered: false, raw: null};
+  }
+  const parsed = parseProjectLibrary(raw);
+  return parsed ? {state: parsed.recovered ? 'recovered' : 'ready', ...parsed, raw} :
+    {state: 'invalid', library: emptyProjectLibrary(), recovered: false, raw};
+}
+
+function storeProjectLibrary(library, storage = localStorage, expectedRaw) {
+  if (projectTransferActive() || uncertainLibraryStorage.has(storage)) return false;
+  const candidate = projectLibraryRecord(library);
+  const checked = parseProjectLibrary(candidate);
+  if (!checked || checked.recovered || projectLibraryRecord(checked.library) !== candidate) return false;
+  let previous;
+  try {
+    previous = storage.getItem(projectLibraryKey);
+    if (expectedRaw !== undefined && previous !== expectedRaw) return false;
+    storage.setItem(projectLibraryKey, candidate);
+    const readBack = storage.getItem(projectLibraryKey);
+    const parsed = parseProjectLibrary(readBack);
+    if (readBack === candidate && parsed && !parsed.recovered &&
+        projectLibraryRecord(parsed.library) === candidate) return true;
+  } catch (_) {}
+  let restored = false;
+  try {
+    if (previous === null || previous === undefined) storage.removeItem(projectLibraryKey);
+    else storage.setItem(projectLibraryKey, previous);
+    restored = storage.getItem(projectLibraryKey) === (previous ?? null);
+  } catch (_) {}
+  if (!restored) uncertainLibraryStorage.add(storage);
+  return false;
+}
+
+function migrateProjectLibrary(storage = localStorage) {
+  const existing = loadProjectLibrary(storage);
+  if (existing.state !== 'missing') return existing;
+  const bytes = loadLastKnownGood(storage);
+  if (!bytes) return existing;
+  const library = emptyProjectLibrary();
+  library.projects.push({id: 1, nextRevision: 2,
+    revisions: [{id: 1, envelope: envelopeValue(bytes)}]});
+  library.nextProject = 2;
+  return storeProjectLibrary(library, storage, null) ?
+    {state: 'migrated', library, recovered: false} :
+    {state: 'fault', library: emptyProjectLibrary(), recovered: false};
+}
+
+function mutableProjectLibrary(storage) {
+  const current = loadProjectLibrary(storage);
+  if (current.state !== 'ready' && current.state !== 'missing') return null;
+  return {library: JSON.parse(projectLibraryRecord(current.library)), raw: current.raw};
+}
+
+function lastKnownGoodSnapshot(storage) {
+  try {
+    const raw = storage.getItem(projectStoreKey);
+    return {raw, bytes: parseEnvelopeRecord(raw)};
+  } catch (_) { return {raw: null, bytes: null}; }
+}
+
+function addLibraryProject(storage = localStorage) {
+  const slot = lastKnownGoodSnapshot(storage);
+  const bytes = slot.bytes;
+  const mutable = mutableProjectLibrary(storage);
+  const library = mutable?.library;
+  if (projectTransferActive() || !bytes || !library ||
+      library.projects.length >= projectLibraryMaxProjects || !validLibraryId(library.nextProject + 1)) return false;
+  const id = library.nextProject++;
+  library.projects.push({id, nextRevision: 2, revisions: [{id: 1, envelope: envelopeValue(bytes)}]});
+  try { if (storage.getItem(projectStoreKey) !== slot.raw) return false; } catch (_) { return false; }
+  return storeProjectLibrary(library, storage, mutable.raw) ? id : false;
+}
+
+function addLibraryRevision(projectId, storage = localStorage, confirmAction = globalThis.confirm) {
+  if (projectTransferActive()) return false;
+  const slot = lastKnownGoodSnapshot(storage);
+  const bytes = slot.bytes;
+  const mutable = mutableProjectLibrary(storage);
+  const library = mutable?.library;
+  const project = library?.projects.find((item) => item.id === projectId);
+  if (!bytes || !project || !validLibraryId(project.nextRevision + 1)) return false;
+  const envelope = envelopeValue(bytes);
+  const newest = project.revisions[project.revisions.length - 1];
+  if (newest && newest.envelope.envelope === envelope.envelope) return 'duplicate';
+  if (project.revisions.length === projectLibraryMaxRevisions) {
+    const oldest = project.revisions[0];
+    const message = `Save this revision and permanently evict ${libraryProjectName(project)} ` +
+      `saved copy ${oldest.id}?`;
+    if (typeof confirmAction !== 'function' || !confirmAction(message)) return 'cancelled';
+    try {
+      if (storage.getItem(projectLibraryKey) !== mutable.raw ||
+          storage.getItem(projectStoreKey) !== slot.raw) return 'changed';
+    } catch (_) { return false; }
+  } else {
+    try { if (storage.getItem(projectStoreKey) !== slot.raw) return 'changed'; } catch (_) { return false; }
+  }
+  const id = project.nextRevision++;
+  project.revisions.push({id, envelope});
+  if (project.revisions.length > projectLibraryMaxRevisions) project.revisions.shift();
+  return storeProjectLibrary(library, storage, mutable.raw) ? id : false;
+}
+
+function stageLibraryRevision(projectId, revisionId, storage = localStorage) {
+  if (projectTransferActive()) return false;
+  const current = loadProjectLibrary(storage);
+  const revision = current.library.projects.find((item) => item.id === projectId)?.revisions
+    .find((item) => item.id === revisionId);
+  const bytes = revision && parseEnvelopeValue(revision.envelope);
+  return !!bytes && storeLastKnownGood(bytes, storage);
+}
+
+function deleteLibraryProject(projectId, storage = localStorage) {
+  if (projectTransferActive()) return false;
+  const mutable = mutableProjectLibrary(storage);
+  const library = mutable?.library;
+  const index = library?.projects.findIndex((item) => item.id === projectId) ?? -1;
+  if (index < 0) return false;
+  library.projects.splice(index, 1);
+  return storeProjectLibrary(library, storage, mutable.raw);
+}
+
+function deleteLibraryRevision(projectId, revisionId, storage = localStorage) {
+  if (projectTransferActive()) return false;
+  const mutable = mutableProjectLibrary(storage);
+  const library = mutable?.library;
+  const projectIndex = library?.projects.findIndex((item) => item.id === projectId) ?? -1;
+  if (projectIndex < 0) return false;
+  const project = library.projects[projectIndex];
+  const revisionIndex = project.revisions.findIndex((item) => item.id === revisionId);
+  if (revisionIndex < 0) return false;
+  project.revisions.splice(revisionIndex, 1);
+  if (!project.revisions.length) library.projects.splice(projectIndex, 1);
+  return storeProjectLibrary(library, storage, mutable.raw);
+}
+
+function confirmLibraryDelete(action, projectId, revisionId, storage = localStorage,
+    confirmAction = globalThis.confirm) {
+  if (action !== 'delete-project' && action !== 'delete-revision') return false;
+  const current = loadProjectLibrary(storage);
+  const project = current.state === 'ready' && current.library.projects
+    .find((item) => item.id === projectId);
+  const revision = project?.revisions.find((item) => item.id === revisionId);
+  if (!project || action === 'delete-revision' && !revision) return false;
+  let slotRaw;
+  try {
+    slotRaw = storage.getItem(projectStoreKey);
+  } catch (_) { return false; }
+  const message = action === 'delete-project' ?
+    `Delete ${libraryProjectName(project)} project ${project.id} and every saved revision? ` +
+      'The tracker and browser slot will not change.' :
+    `Delete ${libraryProjectName(project)} saved copy ${revision.id}? ` +
+      'The tracker and browser slot will not change.';
+  if (typeof confirmAction !== 'function' || !confirmAction(message)) return 'cancelled';
+  try {
+    if (storage.getItem(projectLibraryKey) !== current.raw ||
+        storage.getItem(projectStoreKey) !== slotRaw) return 'changed';
+  } catch (_) { return false; }
+  return action === 'delete-project' ? deleteLibraryProject(projectId, storage) :
+    deleteLibraryRevision(projectId, revisionId, storage);
+}
+
+function resetProjectLibrary(storage = localStorage, confirmAction = globalThis.confirm) {
+  if (projectTransferActive() || uncertainLibraryStorage.has(storage)) return false;
+  let snapshot;
+  try { snapshot = storage.getItem(projectLibraryKey); } catch (_) { return false; }
+  if (typeof confirmAction !== 'function' || !confirmAction(
+    'Reset only the browser project library? The tracker and last-known-good browser slot will not change.')) {
+    return 'cancelled';
+  }
+  try { if (storage.getItem(projectLibraryKey) !== snapshot) return 'changed'; } catch (_) { return false; }
+  return storeProjectLibrary(emptyProjectLibrary(), storage, snapshot);
+}
+
+function libraryProjectName(project) {
+  const bytes = parseEnvelopeValue(project.revisions[project.revisions.length - 1]?.envelope);
+  return bytes ? headerText(bytes, 16, 15) || 'untitled' : 'unavailable';
+}
+
+function projectTransferActive() { return !!(projectSaveTransfer || projectLoadTransfer); }
+
 function frameCrc(bytes) {
   let crc = crc16(bytes, 0, 14);
   for (let i = 0; i < bytes[12]; i++) crc = crc16Byte(crc, bytes[16 + i]);
@@ -465,6 +721,26 @@ globalThis.PocketTrackerProjectIO = Object.freeze({
   writeFrame,
 });
 
+globalThis.PocketTrackerLibrary = Object.freeze({
+  key: projectLibraryKey,
+  maxProjects: projectLibraryMaxProjects,
+  maxRevisions: projectLibraryMaxRevisions,
+  maxChars: projectLibraryMaxChars,
+  emptyProjectLibrary,
+  parseProjectLibrary,
+  loadProjectLibrary,
+  storeProjectLibrary,
+  migrateProjectLibrary,
+  addLibraryProject,
+  addLibraryRevision,
+  stageLibraryRevision,
+  deleteLibraryProject,
+  deleteLibraryRevision,
+  confirmLibraryDelete,
+  resetProjectLibrary,
+  projectTransferActive,
+});
+
 function importProjectJson(raw, storage = localStorage) {
   const bytes = parseProjectJson(raw);
   return bytes !== null && storeLastKnownGood(bytes, storage);
@@ -529,6 +805,84 @@ function setFileStatus(message, failed = false) {
   fileStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
 }
 
+function setLibraryStatus(message, failed = false) {
+  if (!libraryStatus) return;
+  libraryStatus.textContent = message;
+  libraryStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
+}
+
+function selectedLibraryId(select) {
+  const value = Number(select?.value);
+  return validLibraryId(value) ? value : 0;
+}
+
+function addLibraryOption(select, value, text) {
+  const option = document.createElement('option');
+  option.value = String(value);
+  option.textContent = text;
+  select.appendChild(option);
+}
+
+function renderLibraryRevisions(project, preferredRevision = 0) {
+  if (!libraryRevision) return;
+  libraryRevision.replaceChildren();
+  if (!project) {
+    addLibraryOption(libraryRevision, 0, 'No revisions');
+    libraryRevision.disabled = true;
+    return;
+  }
+  libraryRevision.disabled = false;
+  for (const revision of [...project.revisions].reverse()) {
+    const bytes = parseEnvelopeValue(revision.envelope);
+    addLibraryOption(libraryRevision, revision.id,
+      `Revision ${get16(bytes, 12)} · saved copy ${revision.id}`);
+  }
+  if (project.revisions.some((item) => item.id === preferredRevision)) {
+    libraryRevision.value = String(preferredRevision);
+  }
+}
+
+function renderProjectLibrary(preferredProject = 0, preferredRevision = 0) {
+  if (typeof libraryProject?.replaceChildren !== 'function' ||
+      typeof libraryRevision?.replaceChildren !== 'function') return loadProjectLibrary();
+  const current = loadProjectLibrary();
+  libraryProject.replaceChildren();
+  if (!current.library.projects.length) {
+    addLibraryOption(libraryProject, 0, 'No saved projects');
+    libraryProject.disabled = true;
+    renderLibraryRevisions(null);
+    return current;
+  }
+  libraryProject.disabled = false;
+  for (const project of current.library.projects) {
+    addLibraryOption(libraryProject, project.id, `${libraryProjectName(project)} · project ${project.id}`);
+  }
+  if (current.library.projects.some((item) => item.id === preferredProject)) {
+    libraryProject.value = String(preferredProject);
+  }
+  const project = current.library.projects.find((item) => item.id === selectedLibraryId(libraryProject));
+  renderLibraryRevisions(project, preferredRevision);
+  return current;
+}
+
+function initializeProjectLibrary() {
+  if (!projectLibraryPanel || typeof libraryProject?.replaceChildren !== 'function' ||
+      typeof libraryRevision?.replaceChildren !== 'function') return;
+  const initial = migrateProjectLibrary();
+  renderProjectLibrary();
+  if (initial.state === 'migrated') {
+    setLibraryStatus('Migrated the valid browser slot into project 1. The tracker is unchanged.');
+  } else if (initial.state === 'recovered') {
+    setLibraryStatus('Recovered older valid revisions. Corrupt stored copies remain untouched.', true);
+  } else if (initial.state === 'invalid') {
+    setLibraryStatus('The library record is invalid and was not changed. The browser slot is still available.', true);
+  } else if (initial.state === 'fault') {
+    setLibraryStatus('Browser storage is unavailable. No project data was changed.', true);
+  } else if (initial.state === 'uncertain') {
+    setLibraryStatus('Library storage integrity is uncertain. Reload before making changes.', true);
+  }
+}
+
 fileToggle?.addEventListener('click', () => {
   const open = filePanel.hidden;
   filePanel.hidden = !open;
@@ -542,6 +896,59 @@ filePanel?.addEventListener('click', (event) => {
   const ok = exportStoredFile(action);
   setFileStatus(ok ? 'Download created from the checksum-verified browser slot.' :
     'No valid browser slot. Save in the tracker first.', !ok);
+});
+
+libraryProject?.addEventListener('change', () => {
+  const current = loadProjectLibrary();
+  renderLibraryRevisions(current.library.projects.find(
+    (item) => item.id === selectedLibraryId(libraryProject)));
+});
+
+projectLibraryPanel?.addEventListener('click', (event) => {
+  const action = event.target.closest?.('[data-library-action]')?.dataset.libraryAction;
+  if (!action) return;
+  const projectId = selectedLibraryId(libraryProject);
+  const revisionId = selectedLibraryId(libraryRevision);
+  if (action === 'stage') {
+    const ok = stageLibraryRevision(projectId, revisionId);
+    setLibraryStatus(ok ? 'Revision staged in the browser slot. Choose Load in the tracker to commit it.' :
+      'Could not stage that revision. Library, browser slot, and tracker are unchanged.', !ok);
+    return;
+  }
+  if (action === 'new') {
+    const id = addLibraryProject();
+    renderProjectLibrary(id || 0);
+    setLibraryStatus(id ? `Saved browser slot as project ${id}.` :
+      'Could not add a project. Save in the tracker first, free a project slot, or check browser storage.', !id);
+    return;
+  }
+  if (action === 'revision') {
+    const id = addLibraryRevision(projectId);
+    renderProjectLibrary(projectId, typeof id === 'number' ? id : revisionId);
+    setLibraryStatus(id === 'duplicate' ? 'The newest saved revision already matches the browser slot.' : id ?
+      id === 'cancelled' ? 'Revision save cancelled. Nothing changed.' :
+      id === 'changed' ? 'Project data changed before the save could commit. Nothing was overwritten.' :
+      `Saved revision ${id}; only the newest ${projectLibraryMaxRevisions} copies are retained.` :
+      'Could not add the revision. Browser storage and existing revisions are unchanged.', !id);
+    return;
+  }
+  if (action === 'reset') {
+    const result = resetProjectLibrary();
+    renderProjectLibrary();
+    setLibraryStatus(result === 'cancelled' ? 'Library reset cancelled. Nothing changed.' :
+      result === 'changed' ? 'Library data changed before reset. Nothing was overwritten.' : result ?
+      'Browser project library reset. The tracker and last-known-good slot are unchanged.' :
+      'Could not reset the browser library. Stored data is unchanged.', !result);
+    return;
+  }
+  const result = confirmLibraryDelete(action, projectId, revisionId);
+  if (result === 'cancelled') {
+    setLibraryStatus('Deletion cancelled. Nothing changed.');
+    return;
+  }
+  renderProjectLibrary();
+  setLibraryStatus(result ? 'Deleted from the project library. The tracker and browser slot are unchanged.' :
+    'Could not delete that item. Project data is unchanged.', !result);
 });
 
 projectImport?.addEventListener('change', async () => {
@@ -564,4 +971,5 @@ projectImport?.addEventListener('change', async () => {
 
 globalThis.PocketTrackerFileIO = Object.freeze({importProjectJson, importProjectP8, exportStoredFile});
 
+initializeProjectLibrary();
 watchProjectIO();

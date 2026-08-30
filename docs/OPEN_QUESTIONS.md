@@ -51,8 +51,17 @@ and materialized carts with unique valid audio sections become profile-none,
 using deterministic filename metadata and no inferred external Lua transform.
 Malformed/duplicate sidecars reject.
 
-- **Revisit:** a project picker, additional revisions, naming UI, and recovery
-  management belong to M4 and must preserve the same staged/atomic boundary.
+- **M4 default:** the browser library keeps up to eight projects and four
+  validated revisions per project. It migrates the legacy browser slot once,
+  stages selections back through that same slot, and never commits live bytes
+  outside tracker Load. Corrupt-newest recovery is non-mutating; quota,
+  read-back, stale confirmation, and cancelled deletion/rollover preserve
+  durable and live state. Recovered/malformed libraries are read-only until an
+  explicit library-only reset, and library work pauses during GPIO transfer.
+- **Revisit:** editable library names, pinning revisions, import/export of the
+  whole library, and more elaborate recovery management require separately
+  designed ownership and quota policies. Concurrent multi-tab writers also
+  require cross-document locking and are outside the first bounded M4 arc.
 
 ## Legacy sketch
 

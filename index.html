@@ -12,10 +12,13 @@
     iframe { display: block; width: 100%; height: 100%; height: 100dvh; border: 0; background: #000; touch-action: none; }
     #file-toggle { position: fixed; top: max(8px, env(safe-area-inset-top)); right: 8px; z-index: 3; }
     #file-panel { position: fixed; top: max(42px, calc(env(safe-area-inset-top) + 42px)); right: 8px; z-index: 3;
-      width: min(260px, calc(100vw - 16px)); padding: 10px; border: 1px solid #5b5b79; border-radius: 6px;
-      background: #101018ee; font: 13px/1.35 system-ui, sans-serif; }
+      width: min(330px, calc(100vw - 16px)); max-height: calc(100dvh - 54px); overflow: auto; padding: 10px;
+      border: 1px solid #5b5b79; border-radius: 6px; background: #101018ee; font: 13px/1.35 system-ui, sans-serif; }
     #file-panel[hidden] { display: none; }
-    #file-panel button { display: block; width: 100%; margin: 6px 0; padding: 7px; text-align: left; }
+    #file-panel button, #file-panel select { display: block; width: 100%; min-height: 36px; margin: 6px 0; padding: 7px; text-align: left; }
+    #project-library { margin: 0 0 12px; padding: 8px; border: 1px solid #454560; }
+    #project-library label { display: block; margin-top: 6px; }
+    #project-library-status { min-height: 2.7em; margin: 8px 1px; color: #c9c9de; }
     #file-status { min-height: 2.7em; margin: 8px 1px 0; color: #c9c9de; }
   </style>
 </head>
@@ -23,6 +26,20 @@
   <iframe id="cart" src="tracker.html" title="Pocket Tracker PICO-8 cartridge" allow="autoplay"></iframe>
   <button id="file-toggle" type="button" aria-expanded="false" aria-controls="file-panel">Files</button>
   <section id="file-panel" aria-label="Lossless project files" hidden>
+    <fieldset id="project-library">
+      <legend>Project library</legend>
+      <label for="library-project">Project</label>
+      <select id="library-project" aria-describedby="project-library-status"></select>
+      <label for="library-revision">Revision</label>
+      <select id="library-revision" aria-describedby="project-library-status"></select>
+      <button type="button" data-library-action="stage">Stage revision for tracker Load</button>
+      <button type="button" data-library-action="new">Save browser slot as new project</button>
+      <button type="button" data-library-action="revision">Add browser slot as revision</button>
+      <button type="button" data-library-action="delete-revision">Delete selected revision…</button>
+      <button type="button" data-library-action="delete-project">Delete selected project…</button>
+      <button type="button" data-library-action="reset">Reset browser library…</button>
+      <p id="project-library-status" role="status" aria-live="polite">Choose a project and revision to stage.</p>
+    </fieldset>
     <strong>Lossless project files</strong>
     <button type="button" data-file-action="json">Export Pocket Tracker JSON</button>
     <button type="button" data-file-action="authored">Export .p8 — authored + profile</button>
