@@ -115,15 +115,15 @@ function update_sfx_screen()
  if sfx_mode!="rows" then
   local meta,wave=sfx_mode=="meta",sfx_is_waveform()
   local field=meta and sfx_meta_field or sfx_filter_field
-  field=mid(1,field+(btnp(3) and 1 or btnp(2) and -1 or 0),
+  field=mid(1,field+(dpad_pressed[4] and 1 or dpad_pressed[3] and -1 or 0),
    meta and (sfx_number<8 and (wave and 2 or 4) or 3) or wave and 3 or 5)
   if meta then sfx_meta_field=field else sfx_filter_field=field end
  else
   local fields=sfx_is_waveform() and 2 or 5
   if not sfx_row_op then
-   sfx_field=mid(1,sfx_field+(btnp(1) and 1 or btnp(0) and -1 or 0),fields)
+   sfx_field=mid(1,sfx_field+(dpad_pressed[2] and 1 or dpad_pressed[1] and -1 or 0),fields)
   end
-  sfx_row=mid(0,sfx_row+(btnp(3) and 1 or btnp(2) and -1 or 0),31)
+  sfx_row=mid(0,sfx_row+(dpad_pressed[4] and 1 or dpad_pressed[3] and -1 or 0),31)
   sfx_keep_visible()
  end
 end

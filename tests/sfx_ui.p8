@@ -6,6 +6,9 @@ __lua__
 #include ../song_ui.lua
 #include ../sfx_ui.lua
 fails=0
+test_buttons={}
+function btn(i) return test_buttons[i+1] or false end
+function btnp() return false end
 function say() end
 function song_restore_then(action) return action() end
 function ck(v,s) if not v then fails+=1 printh("fail: "..s) end end
@@ -17,7 +20,7 @@ function setup()
  song_pattern=0 song_channel=0 song_play_pattern=0
  sfx_number=63 sfx_row=31 sfx_scroll=0 sfx_field=1 sfx_mode="rows"
  edit_owner=nil undo_owner=nil context_menu=nil action_gate=false
- sfx_error=nil
+ sfx_error,sfx_row_op=nil,nil transport_tick=0
 end
 function edit(field,value,mask)
  sfx_field=field
@@ -26,6 +29,11 @@ function edit(field,value,mask)
  edit_value=value
  ck(edit_commit(),"commit field "..field)
  own(before,raw(63,31),mask,"owned field "..field)
+end
+function repeat_frame(i,down,screen)
+ for j=1,4 do dpad_pressed[j]=false end
+ dpad_pressed[i]=dpad_step(i,down)
+ screen()
 end
 function _init()
  setup()
@@ -112,6 +120,79 @@ function _init()
  ck(edit_commit() and bank_sfx_filter(0,4)==2,"wave filter commit")
  sfx_number=8 sfx_mode="meta" sfx_meta_field=4 sfx_error=nil
  ck(not sfx_begin_edit() and sfx_error=="mode unavailable","mode limited to sfx 0-7")
+
+ -- D-pad taps change once, then repeat at 16/4 and accelerate at 48/2.
+ setup() app_view="song" song_pattern=0 song_channel=0 song_scroll=0
+ reset_action_input()
+ repeat_frame(2,true,update_song_screen)
+ repeat_frame(2,false,update_song_screen)
+ ck(song_channel==1,"song tap exactly once")
+ song_channel=0 reset_action_input()
+ for frame=1,50 do repeat_frame(4,true,update_song_screen) end
+ ck(song_pattern==11 and song_scroll==2,"song hold cadence viewport")
+ repeat_frame(4,false,update_song_screen)
+ ck(song_pattern==11,"song release stops repeat")
+ song_pattern=63 song_scroll=54 reset_action_input()
+ for frame=1,50 do repeat_frame(4,true,update_song_screen) end
+ ck(song_pattern==63 and song_scroll==54,"song hold clamps")
+
+ setup() app_view="sfx" sfx_row=0 sfx_scroll=0 sfx_field=1
+ reset_action_input()
+ repeat_frame(2,true,update_sfx_screen)
+ repeat_frame(2,false,update_sfx_screen)
+ ck(sfx_field==2,"sfx tap exactly once")
+ sfx_field=1 reset_action_input()
+ for frame=1,50 do repeat_frame(4,true,update_sfx_screen) end
+ ck(sfx_row==11 and sfx_scroll==3,"sfx hold cadence viewport")
+
+ setup() app_view="song" song_pattern=0 song_channel=0
+ ck(song_begin_edit("sfx"),"repeat scalar begin")
+ edit_value=60 reset_action_input()
+ repeat_frame(1,true,update_song_screen)
+ repeat_frame(1,false,update_song_screen)
+ ck(edit_value==59,"scalar tap exactly once")
+ edit_value=60 reset_action_input()
+ for frame=1,50 do repeat_frame(2,true,update_song_screen) end
+ ck(edit_value==7,"scalar hold cadence wraps")
+ edit_cancel()
+
+ -- Action gates, menus, row operations, and cancellation clear repeat state.
+ reset_action_input()
+ for frame=1,20 do dpad_step(4,true) end
+ dpad_update(false)
+ ck(dpad_step(4,true) and not dpad_step(4,true),"action reset restarts tap cadence")
+ reset_action_input()
+ local repeats=0
+ for block=1,200 do
+  for frame=1,200 do if dpad_step(1,true) then repeats+=1 end end
+ end
+ ck(repeats==19986,"sustained cadence does not overflow")
+ setup() app_view="song" context_menu="song" context_item=1
+ dpad_update(false) update_song_screen()
+ ck(context_item==1,"context menu excludes acceleration")
+ setup() app_view="sfx" sfx_row=5 sfx_row_op=1
+ dpad_update(false) update_sfx_screen()
+ ck(sfx_row==5,"row operation excludes acceleration")
+
+ -- The production frame gate isolates actions and chords from D-pad repeat.
+ setup() app_view="song" song_pattern=0 song_scroll=0 reset_action_input()
+ test_buttons={false,false,false,true,true,false}
+ for frame=1,20 do _update60() end
+ ck(song_pattern==0 and context_menu=="start","o hold isolates dpad repeat")
+ test_buttons={} close_context_menu()
+ test_buttons={false,false,false,true,false,false}
+ _update60() _update60()
+ ck(song_pattern==1,"action release restarts cadence")
+ setup() app_view="sfx" sfx_row=0 sfx_scroll=0 sfx_row_op=1
+ reset_action_input() test_buttons={false,false,false,true}
+ for frame=1,50 do _update60() end
+ ck(sfx_row==0,"row operation frame gate isolates repeat")
+ setup() app_view="sfx" sfx_row=0 sfx_scroll=0
+ poke2(bank_note_addr(sfx_number,0),0x1234) bank_project_init()
+ reset_action_input() test_buttons={false,false,false,true,true,true}
+ for frame=1,50 do _update60() end
+ ck(sfx_row==0 and raw(sfx_number,0)==0,"chord isolates repeat and acts once")
+ test_buttons={}
  if fails==0 then printh("pocket tracker sfx ui: passed")
  else printh("pocket tracker sfx ui: failed "..fails) end
  extcmd("shutdown")

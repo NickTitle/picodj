@@ -477,3 +477,34 @@ and regenerated `tracker.js` is SHA-256
 `f65b3f8297f4adea2feb4794da41a657bdda1fcb45a7c6de944c734f968c4690`.
 The production-shaped runtime retained 600 frames at 60 FPS with no bad frame
 and peak `stat(1)` of 0.0031.
+
+## 18. First M4 deterministic native D-pad acceleration
+
+Native SONG/SFX navigation and staged scalar editing retain one change on
+press frame 1, then repeat on frames 16, 20, 24, 28, 32, 36, 40, and 44.
+The sustained-hold phase repeats on frame 48 and every two frames thereafter.
+Release or any excluded input owner clears the counter, so the next press is
+again exactly one change. The bounded counter cycles between its two fast-phase
+states and cannot overflow during an indefinitely held direction.
+
+Only ordinary D-pad navigation and staged scalar values consume the accelerated
+signal. O/X actions, the O+X chord, action-release gates, context menus,
+row-operation selection/confirmation, and destructive project commands retain
+their prior `btnp()` or hold/release paths. SONG and SFX clamp/viewport behavior
+and scalar wrap behavior are unchanged. Browser and touch code is unchanged.
+
+PICO-8 0.2.7 coverage in `tests/sfx_ui.p8` exercises tap and both repeat phases
+through SONG, SFX, and scalar editing; SONG/SFX viewport updates; clamp and
+wrap behavior; release/reset; long-hold overflow resistance; and action, chord,
+menu, row-operation, and cancellation isolation. All 17 native cartridges and
+all three Node suites pass.
+
+The accepted five-file graph measures **7,066 tokens**, leaving 102 below the
+7,168 M4 gate and 1,126 below the PICO-8 hard ceiling. Its 41,825 source bytes
+export to a PXA header of 41,840 raw and 11,582 compressed bytes. Two isolated
+same-basename exports are byte-identical; `tracker.html` remains SHA-256
+`858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and regenerated `tracker.js` is SHA-256
+`5d732d0436b814e7839105095352e090b9940e2c187365567e468c34138e5c38`.
+The production-shaped runtime retained 600 frames at 60 FPS with no bad frame
+and peak `stat(1)` of 0.0044.
