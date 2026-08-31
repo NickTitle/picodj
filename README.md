@@ -131,6 +131,16 @@ Project and revision selection uses labelled native controls for touch and
 keyboard access; every deletion requires confirmation. This first arc supports
 one active writer tab; concurrent multi-tab writes are not serialized.
 
+## Browser help
+
+The browser shell's **Help** button opens a responsive modal guide to SONG,
+SFX, accelerated input, and browser project recovery. Native button activation
+works with touch and keyboard. While help is open, the tracker, Files panel,
+and other background controls are inert; focus is trapped inside the dialog.
+Close, Escape, and native dialog cancellation restore both the prior inert
+state and focus to the opener. Opening and closing help is DOM-only and never
+reads or writes GPIO, browser storage, or live project state.
+
 ## Build and test
 
 PICO-8 must be installed separately. From this directory:
@@ -148,6 +158,8 @@ env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 node tests/mobile_hold.js
 node tests/project_io.js
 node tests/file_io.js
+node tests/help_dialog.js
+PLAYWRIGHT_MODULE=/path/to/playwright node tests/help_viewport.js
 
 cp pocket-tracker-data.p8 tests/fixtures/pocket-tracker-data-test.p8
 timeout 30s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
