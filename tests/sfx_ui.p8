@@ -6,9 +6,9 @@ __lua__
 #include ../song_ui.lua
 #include ../sfx_ui.lua
 fails=0
-test_buttons={}
+test_buttons,test_pressed={},{}
 function btn(i) return test_buttons[i+1] or false end
-function btnp() return false end
+function btnp(i) return test_pressed[i+1] or false end
 function say() end
 function song_restore_then(action) return action() end
 function ck(v,s) if not v then fails+=1 printh("fail: "..s) end end
@@ -16,6 +16,7 @@ function own(a,b,m,s) ck(((a^^b)&(0xffff^^m))==0,s) end
 function raw(s,r) local a=bank_note_addr(s,r) return a and peek2(a) end
 function setup()
  reload(bank_audio_base,bank_audio_base,bank_size,"../pocket-tracker.p8")
+ test_buttons,test_pressed={},{}
  bank_project_init() playing=false audition_active=false
  song_pattern=0 song_channel=0 song_play_pattern=0
  sfx_number=63 sfx_row=31 sfx_scroll=0 sfx_field=1 sfx_mode="rows"
@@ -183,10 +184,22 @@ function _init()
  test_buttons={false,false,false,true,false,false}
  _update60() _update60()
  ck(song_pattern==1,"action release restarts cadence")
+ setup() app_view="sfx" sfx_row=8 sfx_scroll=0 sfx_row_op=1
+ reset_action_input() test_pressed={false,false,false,true}
+ _update60() test_pressed={} _update60()
+ ck(sfx_row==9 and sfx_scroll==1,"row operation tap moves once and scrolls")
+ setup() app_view="sfx" sfx_row=31 sfx_scroll=23 sfx_row_op=1
+ reset_action_input() test_pressed={false,false,false,true}
+ _update60()
+ ck(sfx_row==31 and sfx_scroll==23,"row operation tap clamps")
  setup() app_view="sfx" sfx_row=0 sfx_scroll=0 sfx_row_op=1
  reset_action_input() test_buttons={false,false,false,true}
- for frame=1,50 do _update60() end
- ck(sfx_row==0,"row operation frame gate isolates repeat")
+ for frame=1,50 do
+  test_pressed={false,false,false,frame==1 or (frame>=16 and frame%4==0)}
+  _update60()
+ end
+ ck(sfx_row==10 and sfx_scroll==2,"row operation uses native repeat")
+ ck(dpad_hold[4]==0,"row operation never consumes accelerated signal")
  setup() app_view="sfx" sfx_row=0 sfx_scroll=0
  poke2(bank_note_addr(sfx_number,0),0x1234) bank_project_init()
  reset_action_input() test_buttons={false,false,false,true,true,true}

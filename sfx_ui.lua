@@ -123,7 +123,9 @@ function update_sfx_screen()
   if not sfx_row_op then
    sfx_field=mid(1,sfx_field+(dpad_pressed[2] and 1 or dpad_pressed[1] and -1 or 0),fields)
   end
-  sfx_row=mid(0,sfx_row+(dpad_pressed[4] and 1 or dpad_pressed[3] and -1 or 0),31)
+  local up,down=dpad_pressed[3],dpad_pressed[4]
+  if sfx_row_op then up,down=btnp(2),btnp(3) end
+  sfx_row=mid(0,sfx_row+(down and 1 or up and -1 or 0),31)
   sfx_keep_visible()
  end
 end
