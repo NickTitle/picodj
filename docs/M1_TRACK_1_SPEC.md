@@ -499,12 +499,12 @@ wrap behavior; release/reset; long-hold overflow resistance; and action, chord,
 menu, row-operation, and cancellation isolation. All 17 native cartridges and
 all three Node suites pass.
 
-The accepted five-file graph measures **7,066 tokens**, leaving 102 below the
-7,168 M4 gate and 1,126 below the PICO-8 hard ceiling. Its 41,825 source bytes
-export to a PXA header of 41,840 raw and 11,582 compressed bytes. Two isolated
+The accepted five-file graph measures **7,082 tokens**, leaving 86 below the
+7,168 M4 gate and 1,110 below the PICO-8 hard ceiling. Its 41,898 source bytes
+export to a PXA header of 41,913 raw and 11,613 compressed bytes. Two isolated
 same-basename exports are byte-identical; `tracker.html` remains SHA-256
 `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
 and regenerated `tracker.js` is SHA-256
-`5d732d0436b814e7839105095352e090b9940e2c187365567e468c34138e5c38`.
+`38ba6a8b0563ddb88dc58b073d6df6eef06d7fc483d8a1271ab18997a06ed6c3`.
 The production-shaped runtime retained 600 frames at 60 FPS with no bad frame
 and peak `stat(1)` of 0.0044.
