@@ -8,8 +8,9 @@
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; overscroll-behavior: none; }
+    html, body, #app-shell { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; overscroll-behavior: none; }
     iframe { display: block; width: 100%; height: 100%; height: 100dvh; border: 0; background: #000; touch-action: none; }
+    #help-toggle { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; z-index: 3; }
     #file-toggle { position: fixed; top: max(8px, env(safe-area-inset-top)); right: 8px; z-index: 3; }
     #file-panel { position: fixed; top: max(42px, calc(env(safe-area-inset-top) + 42px)); right: 8px; z-index: 3;
       width: min(330px, calc(100vw - 16px)); max-height: calc(100dvh - 54px); overflow: auto; padding: 10px;
@@ -20,34 +21,84 @@
     #project-library label { display: block; margin-top: 6px; }
     #project-library-status { min-height: 2.7em; margin: 8px 1px; color: #c9c9de; }
     #file-status { min-height: 2.7em; margin: 8px 1px 0; color: #c9c9de; }
+    #help-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto;
+      padding: 0; border: 1px solid #77779a; border-radius: 8px; background: #101018; color: #eeeef8;
+      font: 15px/1.45 system-ui, sans-serif; }
+    #help-dialog::backdrop { background: #000c; }
+    #help-dialog header { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 12px 16px; border-bottom: 1px solid #454560; background: #101018f5; }
+    #help-dialog h1 { margin: 0; font-size: 1.35rem; }
+    #help-dialog h2 { margin: 1.25rem 0 0.35rem; font-size: 1.05rem; color: #cfcfff; }
+    #help-dialog p, #help-dialog ul { margin: 0.45rem 0; }
+    #help-dialog main { padding: 4px 18px 16px; }
+    #help-dialog footer { padding: 0 18px max(18px, env(safe-area-inset-bottom)); }
+    #help-dialog button { min-width: 44px; min-height: 44px; padding: 8px 12px; }
+    #help-dialog footer button { width: 100%; }
+    @media (max-width: 600px), (pointer: coarse) {
+      #help-toggle, #file-toggle { min-width: 44px; min-height: 44px; }
+      #help-dialog { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0; }
+      #help-dialog header { padding-top: max(12px, env(safe-area-inset-top)); }
+      #help-dialog main { padding-inline: 16px; }
+    }
   </style>
 </head>
 <body>
-  <iframe id="cart" src="tracker.html" title="Pocket Tracker PICO-8 cartridge" allow="autoplay"></iframe>
-  <button id="file-toggle" type="button" aria-expanded="false" aria-controls="file-panel">Files</button>
-  <section id="file-panel" aria-label="Lossless project files" hidden>
-    <fieldset id="project-library">
-      <legend>Project library</legend>
-      <label for="library-project">Project</label>
-      <select id="library-project" aria-describedby="project-library-status"></select>
-      <label for="library-revision">Revision</label>
-      <select id="library-revision" aria-describedby="project-library-status"></select>
-      <button type="button" data-library-action="stage">Stage revision for tracker Load</button>
-      <button type="button" data-library-action="new">Save browser slot as new project</button>
-      <button type="button" data-library-action="revision">Add browser slot as revision</button>
-      <button type="button" data-library-action="delete-revision">Delete selected revision…</button>
-      <button type="button" data-library-action="delete-project">Delete selected project…</button>
-      <button type="button" data-library-action="reset">Reset browser library…</button>
-      <p id="project-library-status" role="status" aria-live="polite">Choose a project and revision to stage.</p>
-    </fieldset>
-    <strong>Lossless project files</strong>
-    <button type="button" data-file-action="json">Export Pocket Tracker JSON</button>
-    <button type="button" data-file-action="authored">Export .p8 — authored + profile</button>
-    <button type="button" data-file-action="materialized">Export .p8 — materialized playback</button>
-    <button type="button" data-file-action="import">Import JSON / .p8 audio</button>
-    <input id="project-import" type="file" accept=".json,.p8,application/json" hidden>
-    <p id="file-status" role="status" aria-live="polite">Save in the tracker before exporting.</p>
-  </section>
+  <div id="app-shell">
+    <button id="help-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="help-dialog">Help</button>
+    <iframe id="cart" src="tracker.html" title="Pocket Tracker PICO-8 cartridge" allow="autoplay"></iframe>
+    <button id="file-toggle" type="button" aria-expanded="false" aria-controls="file-panel">Files</button>
+    <section id="file-panel" aria-label="Lossless project files" hidden>
+      <fieldset id="project-library">
+        <legend>Project library</legend>
+        <label for="library-project">Project</label>
+        <select id="library-project" aria-describedby="project-library-status"></select>
+        <label for="library-revision">Revision</label>
+        <select id="library-revision" aria-describedby="project-library-status"></select>
+        <button type="button" data-library-action="stage">Stage revision for tracker Load</button>
+        <button type="button" data-library-action="new">Save browser slot as new project</button>
+        <button type="button" data-library-action="revision">Add browser slot as revision</button>
+        <button type="button" data-library-action="delete-revision">Delete selected revision…</button>
+        <button type="button" data-library-action="delete-project">Delete selected project…</button>
+        <button type="button" data-library-action="reset">Reset browser library…</button>
+        <p id="project-library-status" role="status" aria-live="polite">Choose a project and revision to stage.</p>
+      </fieldset>
+      <strong>Lossless project files</strong>
+      <button type="button" data-file-action="json">Export Pocket Tracker JSON</button>
+      <button type="button" data-file-action="authored">Export .p8 — authored + profile</button>
+      <button type="button" data-file-action="materialized">Export .p8 — materialized playback</button>
+      <button type="button" data-file-action="import">Import JSON / .p8 audio</button>
+      <input id="project-import" type="file" accept=".json,.p8,application/json" hidden>
+      <p id="file-status" role="status" aria-live="polite">Save in the tracker before exporting.</p>
+    </section>
+  </div>
+  <dialog id="help-dialog" aria-labelledby="help-title" aria-describedby="help-intro" aria-modal="true">
+    <header>
+      <h1 id="help-title">Pocket Tracker help</h1>
+      <button type="button" data-help-close autofocus aria-label="Close help">Close</button>
+    </header>
+    <main>
+      <p id="help-intro">Use the on-screen PICO-8 controls or a keyboard. O confirms and X returns or cancels.</p>
+      <section aria-labelledby="help-song">
+        <h2 id="help-song">SONG</h2>
+        <p>Up/Down chooses pattern 00–3f. Left/Right chooses a channel. O opens its SFX. Hold X for SFX assignment, mute and flow flags, audition mix, undo/redo, and playback.</p>
+      </section>
+      <section aria-labelledby="help-sfx">
+        <h2 id="help-sfx">SFX</h2>
+        <p>Up/Down moves through 32 rows and Left/Right chooses the field. O edits. Tap X returns to SONG. Hold X for row operations, metadata, filters, preview, undo/redo, and slot navigation. O+X toggles note/rest.</p>
+      </section>
+      <section aria-labelledby="help-repeat">
+        <h2 id="help-repeat">Accelerated input</h2>
+        <p>A D-pad press changes once. Ordinary SONG/SFX movement and staged scalar values repeat after a sustained hold, then accelerate. O/X actions, chords, menus, confirmations, row-range selection, and destructive commands never use accelerated repeat.</p>
+      </section>
+      <section aria-labelledby="help-projects">
+        <h2 id="help-projects">Projects and recovery</h2>
+        <p>Hold O in the tracker for browser-slot and data-cart Save/Load. Tracker Save updates only the last-known-good browser slot. The Files panel keeps up to eight projects with four validated saved copies each; new project and revision actions snapshot that slot.</p>
+        <p>Stage copies a validated revision into the browser slot. Tracker Load is the only action that commits it live. Corrupt newer copies fall back to older valid ones without rewriting storage. Failed, cancelled, quota-limited, or stale actions preserve the library, browser slot, and live tracker. Recovery and library reset never change the browser slot or live tracker.</p>
+      </section>
+    </main>
+    <footer><button type="button" data-help-close>Return to tracker</button></footer>
+  </dialog>
   <script src="mobile.js"></script>
+  <script src="help.js"></script>
 </body>
 </html>

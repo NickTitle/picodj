@@ -508,3 +508,30 @@ and regenerated `tracker.js` is SHA-256
 `38ba6a8b0563ddb88dc58b073d6df6eef06d7fc483d8a1271ab18997a06ed6c3`.
 The production-shaped runtime retained 600 frames at 60 FPS with no bad frame
 and peak `stat(1)` of 0.0044.
+
+## 19. M4 browser help and mobile validation
+
+The browser shell exposes Help as the first control in document and tab order.
+Its native modal dialog is labelled by a visible heading and covers SONG, SFX,
+accelerated input, and the exact last-known-good/library/recovery contract.
+Opening help makes only the sibling application shell inert. Button close,
+Escape/cancel, and programmatic close share one cleanup path; Tab and Shift+Tab
+remain within the dialog, and close restores the exact connected opener with
+Help as the fallback. The dialog uses full dynamic-viewport layout on touch
+devices, safe-area padding, internal scrolling, and 44 CSS-pixel actions.
+
+Help is isolated in `help.js`: it does not call the project bridge or library,
+read or write browser storage, touch GPIO, close Files, or alter an in-flight
+transfer. `tests/help_dialog.js` checks static semantics and every close/focus
+path. `tests/help_viewport.js` uses real Chromium user input at 1280x720,
+390x844, 568x320, and rotated 844x390 to verify viewport containment,
+horizontal overflow, reachable touch controls, modal inertness, focus cycling
+and restoration, and byte-exact preservation of both storage keys and all 128
+GPIO bytes after normal browser-shell initialization.
+
+This browser-only arc leaves `pocket-tracker.p8`, `pocket-tracker-data.p8`,
+the five-file native production graph, `tracker.html`, and `tracker.js`
+byte-identical to the accepted input-acceleration baseline. Production remains
+7,082 tokens with PXA 41,913 raw / 11,613 compressed bytes; the generated HTML
+and JavaScript hashes remain `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and `38ba6a8b0563ddb88dc58b073d6df6eef06d7fc483d8a1271ab18997a06ed6c3`.
