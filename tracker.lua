@@ -1,12 +1,25 @@
 -- shared six-button input and menus for the native tracker
 
 hold_frames=18
+dpad_hold,dpad_pressed={0,0,0,0},{}
 start_menu=split"play,save browser slot,load browser slot,save data cart,load data cart"
 
 function say() end
 
 function reset_action_input()
  o_hold,x_hold=0,0
+ dpad_update()
+end
+
+function dpad_step(i,down)
+ local n=down and dpad_hold[i]+1 or 0
+ if n>49 then n=48 end
+ dpad_hold[i]=n
+ return n==1 or n>=16 and n%(n<48 and 4 or 2)==0
+end
+
+function dpad_update(on)
+ for i=1,4 do dpad_pressed[i]=dpad_step(i,on and btn(i-1)) end
 end
 
 function context_items()

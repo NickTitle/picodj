@@ -33,6 +33,14 @@ coverage; it is not included in the production cartridge.
   is restored byte-for-byte on stop.
 - O+X toggles the selected SFX row between a note and a rest.
 
+Native D-pad navigation and staged scalar edits use a deterministic 60 Hz
+repeat cadence: one change on press frame 1, no repeats through frame 15,
+one repeat every four frames from frame 16 through frame 44, then one every
+two frames from frame 48 onward. Release restarts the cadence. O/X actions,
+chords, action-release gates, context and row-operation menus, confirmations,
+and destructive commands keep their existing non-accelerated input paths and
+clear any held D-pad state. Browser and touch controls are unchanged.
+
 SONG playback uses native `music(pattern, nil, channel_mask)`. Track-1 projects
 apply the reversible `+2` profile; profile-none imports play authored bytes raw
 with no snapshot or gain writes. The status always shows `+2` or `raw`.

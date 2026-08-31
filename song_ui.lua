@@ -177,8 +177,8 @@ function edit_undo(owner)
 end
 
 function edit_update()
- if btnp(0) then edit_value=(edit_value+edit_max)%(edit_max+1)
- elseif btnp(1) then edit_value=(edit_value+1)%(edit_max+1)
+ if dpad_pressed[1] then edit_value=(edit_value+edit_max)%(edit_max+1)
+ elseif dpad_pressed[2] then edit_value=(edit_value+1)%(edit_max+1)
  elseif btnp(4) then edit_commit()
  elseif btnp(5) then edit_cancel() end
 end
@@ -227,10 +227,10 @@ function update_song_screen()
 
  if update_action_buttons(btn(4),btn(5)) then return end
 
- if btnp(0) then song_channel=mid(0,song_channel-1,bank_channel_count-1)
- elseif btnp(1) then song_channel=mid(0,song_channel+1,bank_channel_count-1)
- elseif btnp(2) then song_pattern=mid(0,song_pattern-1,bank_pattern_count-1) song_keep_visible()
- elseif btnp(3) then song_pattern=mid(0,song_pattern+1,bank_pattern_count-1) song_keep_visible()
+ if dpad_pressed[1] then song_channel=mid(0,song_channel-1,bank_channel_count-1)
+ elseif dpad_pressed[2] then song_channel=mid(0,song_channel+1,bank_channel_count-1)
+ elseif dpad_pressed[3] then song_pattern=mid(0,song_pattern-1,bank_pattern_count-1) song_keep_visible()
+ elseif dpad_pressed[4] then song_pattern=mid(0,song_pattern+1,bank_pattern_count-1) song_keep_visible()
  elseif btnp(4) then song_open_sfx() end
 end
 
@@ -254,6 +254,7 @@ end
 
 function _update60()
  update_playhead()
+ dpad_update(not context_menu and not sfx_row_op and not action_gate and not btn(4) and not btn(5))
  if app_view=="song" then update_song_screen()
  else update_sfx_screen() end
 end
