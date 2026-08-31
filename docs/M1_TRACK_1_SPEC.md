@@ -535,3 +535,30 @@ byte-identical to the accepted input-acceleration baseline. Production remains
 7,082 tokens with PXA 41,913 raw / 11,613 compressed bytes; the generated HTML
 and JavaScript hashes remain `858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
 and `38ba6a8b0563ddb88dc58b073d6df6eef06d7fc483d8a1271ab18997a06ed6c3`.
+
+## 20. M4 release closure
+
+M4 implementation closes on merged main
+`def53635a5f03330c93fe089a22b503f74900201`. Its bounded requirements map to
+merged evidence as follows:
+
+| Requirement | Merged evidence | Closure evidence |
+| --- | --- | --- |
+| Project browser and multiple revisions | PR #23, merge `7808b8b28566582168aa4d980b0f10d523b3f5c2` | `tests/project_io.js` covers the eight-project/four-revision bounds, accessible selection, monotonic identifiers, exact destructive confirmation, stale snapshots, quota/read-back rollback, and active-transfer/writer isolation. |
+| Recovery | PR #23, merge `7808b8b28566582168aa4d980b0f10d523b3f5c2` | Legacy last-known-good migration occurs only when the library is absent; malformed or recovered libraries become read-only; Stage updates only the validated last-known-good slot; tracker Load remains the only live commit. PTP2 and both storage key formats are unchanged. |
+| Native input acceleration | PR #24, merge `be267321c44b6459afe1d8561a54d44b445fa34e` | PICO-8 0.2.7 coverage verifies one change on press frame 1, repeats on frames 16/20/24/28/32/36/40/44 and every two frames from 48, plus SONG/SFX/scalar, viewport, wrap/clamp, raw row-operation movement, and action/chord/menu/confirmation/destructive isolation. |
+| Help overlay | PR #25, merge `def53635a5f03330c93fe089a22b503f74900201` | `tests/help_dialog.js` verifies labelled native-dialog semantics, keyboard activation, the shared close pipeline, focus trap/restore, and background inertness without storage, GPIO, live-project, Files, or transfer mutation. |
+| Mobile/browser validation | PR #25, merge `def53635a5f03330c93fe089a22b503f74900201` | Real Chromium user input at 1280x720, 390x844, 568x320, and rotated 844x390 verifies containment, internal scrolling, no horizontal overflow, 44-pixel actions, inertness, focus cycling/restoration, and byte-exact storage/GPIO preservation. |
+| Release budget gates | PR #24 baseline, unchanged through PR #25 | The exact five-file graph is 7,082 tokens and 41,898 source bytes. Fresh deterministic export confirms PXA 41,913 raw / 11,613 compressed: 86 tokens below the 7,168 gate, 1,110 below the hard ceiling, and 675 compressed bytes below the 12,288-byte gate. |
+
+The final closure audit reran JavaScript syntax, all three project/file/mobile
+Node suites, both help suites, and all 17 native PICO-8 0.2.7 cartridges. Two
+isolated same-basename exports were mutually byte-identical and matched the
+tracked artifacts: HTML SHA-256
+`858c7c8e299f1900c484a00435dea08590169a70d3c2d2366f671a7bb7161d18`
+and JavaScript SHA-256
+`38ba6a8b0563ddb88dc58b073d6df6eef06d7fc483d8a1271ab18997a06ed6c3`.
+The production-shaped runtime retained 600 frames at 60 FPS with no bad frame
+and peak `stat(1)` of 0.0039. The closure change is documentation-only:
+production, both cartridges, generated exports, browser behavior, and storage
+formats remain byte-identical to merged main.

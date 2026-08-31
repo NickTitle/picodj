@@ -239,9 +239,10 @@ experiments. They are not sufficient as the compatibility data model.
 3. **M3 — Complete modern audio parity:** custom SFX instruments, waveform
    instrument preservation/editing, native data-cart workflow, and robust
    browser `.p8` import/export.
-4. **M4 — Handheld polish:** project browser, multiple revisions, recovery,
-   input acceleration, help overlays, mobile/browser validation, and release
-   budget gates.
+4. **M4 — Handheld polish (complete):** project browser, multiple revisions,
+   recovery, input acceleration, help overlays, mobile/browser validation, and
+   release budget gates. Exact closure evidence is recorded in section 20 of
+   the M1 implementation specification.
 5. **M5 — LSDJ extensions:** chains/phrases, grooves, tables/macros,
    performance mode, and optional external integrations.
 

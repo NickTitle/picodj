@@ -197,5 +197,7 @@ and checksums are documented in
 
 `tests/size_budget.p8` compiles the exact five-file production include graph
 plus a calibrated 1,024-token probe. Its pass marker gates the completed M3
-cart at or below 7,168 tokens, preserving at least 1,024 tokens against
-PICO-8's 8,192-token ceiling for the separately budgeted M4 work.
+and M4 cart at or below 7,168 tokens. The completed M4 production graph is
+7,082 tokens, 86 below that release gate and 1,110 below PICO-8's 8,192-token
+ceiling. Fresh export additionally gates raw PXA at 65,535 bytes and compressed
+PXA at 12,288 bytes; the M4 closure measures 41,913 raw / 11,613 compressed.
