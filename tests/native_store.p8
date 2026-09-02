@@ -13,7 +13,6 @@ stop_audition_calls=0
 function _init() end
 function _update60() end
 function context_label(name) return name end
-function say() end
 function stop_audition()
  stop_audition_calls+=1
  audition_active=false

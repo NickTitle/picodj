@@ -132,7 +132,7 @@ function native_save()
  for i=0,io_envelope_size-1 do
   if peek(base+8+i)!=peek(expected+i) then return io_fail("data cart read-back failed") end
  end
- bank_mark_clean() undo_owner=nil song_error=nil say("data cart saved") return true
+ bank_mark_clean() undo_owner=nil song_error=nil return true
 end
 
 function native_load()
@@ -143,7 +143,7 @@ function native_load()
  if slot<0 then return io_fail("data cart invalid") end
  native_stage(slot)
  if not io_commit_stage() then return io_fail("data cart commit failed") end
- song_error=nil say("data cart loaded") return true
+ song_error=nil return true
 end
 
 function io_begin_frame(command,id,sequence,offset,total,length,flags)
@@ -183,7 +183,6 @@ end
 function io_fail(text,code)
  if code then io_mode="idle" io_emit_control(io_error,code) end
  song_error=text
- say(text)
  return false
 end
 
@@ -200,7 +199,6 @@ function save_song()
  io_wait=0
  io_emit_save_page()
  song_error=nil
- say("saving browser slot")
  return true
 end
 
@@ -212,7 +210,6 @@ function load_song()
  io_load_complete,io_mode,io_wait=false,"load",0
  io_emit_control(io_request_load,0)
  song_error=nil
- say("loading browser slot")
  return true
 end
 
@@ -290,7 +287,6 @@ function io_commit_loaded()
  io_mode="idle"
  io_emit_control(io_done,0)
  song_error=nil
- say("browser slot loaded")
 end
 
 function project_io_update()
@@ -305,7 +301,7 @@ function project_io_update()
          peek(io_gpio+7)==io_sequence and io_get16(io_gpio+8)==io_offset then
    if io_page_last then
     bank_mark_clean() undo_owner=nil io_mode="idle" io_emit_control(io_done,0)
-    song_error=nil say("browser slot saved")
+    song_error=nil
    else
     io_offset+=io_page_length io_sequence=(io_sequence+1)%256
     io_wait=0

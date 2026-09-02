@@ -11,7 +11,6 @@ song_error=nil
 function _init() end
 function _update60() end
 function context_label(name) return name end
-function say() end
 function stop_audition() audition_active=false return true end
 function stop_song() bank_profile_restore() playing=false return true end
 
