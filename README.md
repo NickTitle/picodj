@@ -146,6 +146,20 @@ reads or writes GPIO, browser storage, or live project state.
 PICO-8 must be installed separately. From this directory:
 
 ```sh
+PICO8_BIN=/path/to/pico8 \
+PLAYWRIGHT_MODULE=/path/to/playwright \
+tests/run_all.sh
+```
+
+The full runner exercises all 17 native carts in their required headless,
+isolated-data, or real-mixer shapes; checks both browser JavaScript files; runs
+all five Node/browser suites including real Chromium viewports; measures the exact
+calibrated production token count; performs a fresh export; and gates source,
+raw/compressed PXA, generated hashes, and final worktree cleanliness. Its
+defaults match this repository's maintainer workstation. Individual commands
+remain available for focused diagnosis:
+
+```sh
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy /path/to/pico8 \
   pocket-tracker.p8 -export tracker.html
 
