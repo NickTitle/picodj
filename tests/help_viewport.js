@@ -6,6 +6,20 @@ const {pathToFileURL} = require('node:url');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const pageUrl = pathToFileURL(path.resolve('index.html')).href;
+const browserHookNames = [
+  'PocketTrackerProjectIO',
+  'PocketTrackerLibrary',
+  'PocketTrackerFileIO',
+  'PocketTrackerHelp',
+];
+const browserHookSources = [
+  require('node:fs').readFileSync('mobile.js', 'utf8'),
+  require('node:fs').readFileSync('help.js', 'utf8'),
+];
+const legacyBrowserHooksPresent = browserHookNames.map((name) =>
+  browserHookSources.some((source) => source.includes(`globalThis.${name} = Object.freeze(`)));
+assert.ok(legacyBrowserHooksPresent.every(Boolean) || legacyBrowserHooksPresent.every((value) => !value),
+  'the browser hooks must be completely present or completely absent');
 const storageKeys = [
   'pocket-tracker:project:v2:last-known-good',
   'pocket-tracker:library:v1',
@@ -50,12 +64,63 @@ async function assertDialogInViewport(page, viewport, label) {
     `${label}: close remains visible`);
 }
 
+async function exerciseBrowserShell(page) {
+  await page.locator('#file-toggle').click();
+  assert.equal(await page.locator('#file-toggle').getAttribute('aria-expanded'), 'true',
+    'Files opens through the real browser click path');
+  assert.equal(await page.locator('#file-panel').isVisible(), true);
+
+  await page.locator('[data-file-action="json"]').click();
+  await page.waitForFunction(() => document.querySelector('#file-status').textContent.includes('No valid browser slot'));
+  assert.match(await page.locator('#file-status').textContent(), /No valid browser slot/,
+    'export is reached through the shipped Files event path');
+
+  await page.locator('[data-library-action="new"]').click();
+  assert.match(await page.locator('#project-library-status').textContent(), /Could not add a project/,
+    'library actions are reached through the shipped panel event path');
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.locator('[data-file-action="import"]').click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{}')});
+  await page.waitForFunction(() => document.querySelector('#file-status').textContent.includes('Invalid project file'));
+  assert.match(await page.locator('#file-status').textContent(), /Invalid project file/,
+    'import is reached through the hidden input change event');
+
+  await page.evaluate(() => {
+    const gpio = new Uint8Array(128);
+    gpio.set([80, 84, 75, 50, 1, 7, 23, 0, 0, 0, 64, 18, 0, 0]);
+    let crc = 0xffff;
+    for (let index = 0; index < 14; index++) {
+      crc ^= gpio[index] << 8;
+      for (let bit = 0; bit < 8; bit++) crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
+      crc &= 0xffff;
+    }
+    gpio[14] = crc & 255;
+    gpio[15] = crc >> 8;
+    document.querySelector('#cart').contentWindow.pico8_gpio = gpio;
+  });
+  await page.waitForFunction(() => document.querySelector('#cart').contentWindow.pico8_gpio?.[5] === 6);
+  assert.equal(await page.evaluate(() => document.querySelector('#cart').contentWindow.pico8_gpio[13]), 9,
+    'the shipped requestAnimationFrame project bridge reports a missing browser slot');
+
+  await page.locator('#file-toggle').click();
+  assert.equal(await page.locator('#file-panel').isHidden(), true);
+}
+
 async function runViewport(browser, viewport, touch) {
   const context = await browser.newContext({viewport, hasTouch: touch, isMobile: touch});
   const page = await context.newPage();
   await page.goto(pageUrl);
   await page.waitForSelector('#help-toggle');
   await page.waitForTimeout(500);
+  const browserHookPresence = await page.evaluate((names) => names.map((name) =>
+    Object.prototype.hasOwnProperty.call(window, name)), browserHookNames);
+  assert.deepEqual(browserHookPresence, legacyBrowserHooksPresent,
+    legacyBrowserHooksPresent[0] ?
+      'the real browser retains the complete legacy hook set at the instrumentation baseline' :
+      'the real browser global object contains none of the removed test hooks');
+  if (viewport.width === 1280) await exerciseBrowserShell(page);
   await page.evaluate(() => {
     const frame = document.querySelector('#cart').contentWindow;
     if (!frame.pico8_gpio?.length) frame.pico8_gpio = Array.from({length: 128}, (_, index) => index);

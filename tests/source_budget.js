@@ -15,6 +15,14 @@ const nativeFiles = [
 ];
 const browserFiles = ['index.html', 'mobile.js', 'help.js'];
 const generatedFiles = ['tracker.html', 'tracker.js'];
+const shippedBrowserHookFiles = [
+  'index.html',
+  'mobile.js',
+  'help.js',
+  'tracker.html',
+  'tracker.js',
+  'README.md',
+];
 
 function read(relative) {
   return fs.readFileSync(path.join(root, relative));
@@ -47,6 +55,102 @@ function sumMetrics(files) {
 
 function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+const legacyBrowserHookRemovals = [
+  {
+    symbols: ['PocketTrackerProjectIO', 'PocketTrackerLibrary'],
+    file: 'mobile.js',
+    source: `globalThis.PocketTrackerProjectIO = Object.freeze({
+  key: projectStoreKey,
+  commands: projectCommands,
+  crc16,
+  envelopeValid,
+  envelopeRecord,
+  parseEnvelopeRecord,
+  projectJson,
+  parseProjectJson,
+  materializedBank,
+  p8Audio,
+  parseP8Audio,
+  storeLastKnownGood,
+  loadLastKnownGood,
+  frameValid,
+  writeFrame,
+});
+
+globalThis.PocketTrackerLibrary = Object.freeze({
+  key: projectLibraryKey,
+  maxProjects: projectLibraryMaxProjects,
+  maxRevisions: projectLibraryMaxRevisions,
+  maxChars: projectLibraryMaxChars,
+  emptyProjectLibrary,
+  parseProjectLibrary,
+  loadProjectLibrary,
+  storeProjectLibrary,
+  migrateProjectLibrary,
+  addLibraryProject,
+  addLibraryRevision,
+  stageLibraryRevision,
+  deleteLibraryProject,
+  deleteLibraryRevision,
+  confirmLibraryDelete,
+  libraryDeleteFeedback,
+  resetProjectLibrary,
+  projectTransferActive,
+});
+`,
+  },
+  {
+    symbols: ['PocketTrackerFileIO'],
+    file: 'mobile.js',
+    source: 'globalThis.PocketTrackerFileIO = Object.freeze({importProjectJson, importProjectP8, exportStoredFile});\n',
+  },
+  {
+    symbols: ['PocketTrackerHelp'],
+    file: 'help.js',
+    source: '  globalThis.PocketTrackerHelp = Object.freeze({open: openHelp, close: closeHelp, isOpen: () => active});\n',
+  },
+];
+
+function browserHookLifecycle() {
+  const sources = Object.fromEntries(shippedBrowserHookFiles.map((file) =>
+    [file, read(file).toString('utf8')]));
+  const present = legacyBrowserHookRemovals.map(({file, source}) => sources[file].includes(source));
+  assert.ok(present.every(Boolean) || present.every((value) => !value),
+    'browser test-hook globals must retain every exact legacy definition or remove all four');
+  const withoutDefinitions = {...sources};
+  for (const {file, source} of legacyBrowserHookRemovals) {
+    assert.equal(sources[file].split(source).length - 1, present[0] ? 1 : 0,
+      `${file} differs from its exact legacy browser test-hook definition allowlist`);
+    withoutDefinitions[file] = withoutDefinitions[file].replace(source, '');
+  }
+  const references = [];
+  for (const file of shippedBrowserHookFiles) {
+    withoutDefinitions[file].split('\n').forEach((line, index) => {
+      for (const symbol of legacyBrowserHookRemovals.flatMap((entry) => entry.symbols)) {
+        if (new RegExp(`\\b${symbol}\\b`).test(line)) {
+          references.push({symbol, file, line: index + 1, source: line.trim()});
+        }
+      }
+    });
+  }
+  assert.deepEqual(references, [],
+    'an undocumented browser test-hook global gained a shipped HTML/runtime/README consumer');
+  const removalBytes = legacyBrowserHookRemovals.reduce((total, entry) =>
+    total + Buffer.byteLength(entry.source), 0);
+  const removalLines = legacyBrowserHookRemovals.reduce((total, entry) =>
+    total + (entry.source.match(/\n/g) || []).length, 0);
+  assert.equal(removalBytes, 1071, 'browser test-hook removal byte ledger changed');
+  assert.equal(removalLines, 40, 'browser test-hook removal line ledger changed');
+  return {
+    symbols: legacyBrowserHookRemovals.flatMap((entry) => entry.symbols),
+    shippedFiles: shippedBrowserHookFiles,
+    legacyDefinitionsPresent: present[0],
+    removalBytes,
+    removalLines,
+    shippedConsumers: references,
+  };
 }
 
 function productionReachability(symbol) {
@@ -239,6 +343,7 @@ const snapshotLifecycleReachability = Object.keys(snapshotAllowlist).map(snapsho
 const microHelperReachability = Object.keys(microHelperAllowlists).map(microHelperLifecycle);
 const shippedComments = shippedCommentInventory();
 const nativeCrcPolynomialReferences = nativeCrcPolynomial();
+const browserTestHooks = browserHookLifecycle();
 const nativeTotal = sumMetrics(native);
 const browserTotal = sumMetrics(browser);
 assert.ok(nativeTotal.bytes <= 41898,
@@ -286,6 +391,7 @@ console.log(JSON.stringify({
   microHelpers: microHelperReachability,
   shippedComments,
   nativeCrcPolynomial: nativeCrcPolynomialReferences,
+  browserTestHooks,
   pxa: {
     offset: `0x${pxaOffset.toString(16)}`,
     header: pxaHeader,

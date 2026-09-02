@@ -88,5 +88,4 @@
     }
   });
 
-  globalThis.PocketTrackerHelp = Object.freeze({open: openHelp, close: closeHelp, isOpen: () => active});
 })();

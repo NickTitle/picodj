@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const {withMobileTestHooks} = require('./browser_test_hooks');
 
 class MemoryStorage {
   constructor() { this.values = new Map(); }
@@ -35,10 +36,8 @@ const sandbox = {
   setTimeout() {},
 };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync('mobile.js', 'utf8'), sandbox);
-const io = sandbox.PocketTrackerProjectIO;
-const files = sandbox.PocketTrackerFileIO;
-const library = sandbox.PocketTrackerLibrary;
+vm.runInContext(withMobileTestHooks(fs.readFileSync('mobile.js', 'utf8')), sandbox);
+const {projectIO: io, fileIO: files, library} = sandbox.__PocketTrackerTestHooks;
 const pumpProjectBridge = raf[0];
 const projectSource = fs.readFileSync('project_io.lua', 'utf8');
 const songSource = fs.readFileSync('song_ui.lua', 'utf8');

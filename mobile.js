@@ -713,44 +713,6 @@ function watchProjectIO() {
   requestAnimationFrame(watchProjectIO);
 }
 
-globalThis.PocketTrackerProjectIO = Object.freeze({
-  key: projectStoreKey,
-  commands: projectCommands,
-  crc16,
-  envelopeValid,
-  envelopeRecord,
-  parseEnvelopeRecord,
-  projectJson,
-  parseProjectJson,
-  materializedBank,
-  p8Audio,
-  parseP8Audio,
-  storeLastKnownGood,
-  loadLastKnownGood,
-  frameValid,
-  writeFrame,
-});
-
-globalThis.PocketTrackerLibrary = Object.freeze({
-  key: projectLibraryKey,
-  maxProjects: projectLibraryMaxProjects,
-  maxRevisions: projectLibraryMaxRevisions,
-  maxChars: projectLibraryMaxChars,
-  emptyProjectLibrary,
-  parseProjectLibrary,
-  loadProjectLibrary,
-  storeProjectLibrary,
-  migrateProjectLibrary,
-  addLibraryProject,
-  addLibraryRevision,
-  stageLibraryRevision,
-  deleteLibraryProject,
-  deleteLibraryRevision,
-  confirmLibraryDelete,
-  libraryDeleteFeedback,
-  resetProjectLibrary,
-  projectTransferActive,
-});
 
 function importProjectJson(raw, storage = localStorage) {
   const bytes = parseProjectJson(raw);
@@ -976,7 +938,6 @@ projectImport?.addEventListener('change', async () => {
     'Invalid project file. The browser slot and live project are unchanged.', !ok);
 });
 
-globalThis.PocketTrackerFileIO = Object.freeze({importProjectJson, importProjectP8, exportStoredFile});
 
 initializeProjectLibrary();
 watchProjectIO();
