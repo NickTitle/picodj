@@ -4,8 +4,6 @@ hold_frames=18
 dpad_hold,dpad_pressed={0,0,0,0},{}
 start_menu=split"play,save browser slot,load browser slot,save data cart,load data cart"
 
-function say() end
-
 function reset_action_input()
  o_hold,x_hold=0,0
  dpad_update()
