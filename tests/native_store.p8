@@ -6,6 +6,7 @@ __lua__
 playing=false
 audition_active=false
 undo_owner=nil
+undo_width,undo_dirty,undo_addr=-7,false,0x3199
 song_error=nil
 stop_song_calls=0
 stop_audition_calls=0
@@ -63,11 +64,37 @@ function reload(destination,source,length,filename)
 end
 
 failures=0
+test_live_base=0xca94
 
 function check(ok,label)
  if ok then return end
  failures+=1
  printh("fail: "..label)
+end
+
+function capture_live()
+ memcpy(test_live_base,bank_audio_base,bank_size)
+ test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_is_active()
+ test_live_dirty,test_live_revision=bank_dirty,bank_revision
+ test_live_owner,test_live_width,test_live_undo_dirty,test_live_addr=
+  undo_owner,undo_width,undo_dirty,undo_addr
+ test_live_name,test_live_source=io_project_name,io_project_source
+ test_live_pattern=song_pattern
+ test_live_playing,test_live_audition=playing,audition_active
+end
+
+function live_intact()
+ for i=0,bank_size-1 do
+  if peek(bank_audio_base+i)!=peek(test_live_base+i) then return false end
+ end
+ return bank_profile_kind==test_live_profile and
+  bank_profile_is_active()==test_live_profile_active and
+  bank_dirty==test_live_dirty and bank_revision==test_live_revision and
+  undo_owner==test_live_owner and undo_width==test_live_width and
+  undo_dirty==test_live_undo_dirty and undo_addr==test_live_addr and
+  io_project_name==test_live_name and io_project_source==test_live_source and
+  song_pattern==test_live_pattern and playing==test_live_playing and
+  audition_active==test_live_audition
 end
 
 function fill_bank(seed)
@@ -120,7 +147,9 @@ end
 
 function fault_save(label,cstore_fault,reload_fault)
  reset_cart(61)
- project(67,0,67,label,"fault source") undo_owner="sfx"
+ project(67,0,67,label,"fault source")
+ undo_owner="sfx" undo_width=-9 undo_dirty=false undo_addr=0x42f8
+ capture_live()
  native_cstore_calls=0 native_reload_calls=0
  native_cstore_fault_call=cstore_fault and 1 or 0
  native_reload_fault_call=reload_fault and 2 or 0
@@ -131,6 +160,7 @@ function fault_save(label,cstore_fault,reload_fault)
  check(bank_matches(67) and bank_dirty and bank_revision==67 and
   io_project_name==label and io_project_source=="fault source" and
   undo_owner=="sfx",label.." preserves live project")
+ check(live_intact(),label.." preserves every live byte, profile, and redo state")
  check(record_matches(0,1,61),label.." preserves prior record")
 end
 
@@ -140,7 +170,8 @@ function _init()
  bank_project_init()
  native_cart="fixtures/pocket-tracker-data-test.p8"
  check(native_base==io_header+io_header_size and
-  native_base+native_total<=0x10000,"native scratch is exact and bounded")
+  native_base+native_total==test_live_base and
+  test_live_base+bank_size<=0x10000,"native and test scratch are exact and bounded")
  -- First save writes A at generation 1 and restores temporary profile bytes.
  project(11,1,37,"track one","fixture source")
  check(bank_profile_apply(),"profile applies before save")
@@ -149,8 +180,10 @@ function _init()
  check(not playing and not bank_profile_is_active() and stop_song_calls==1,
   "save stops once and restores authored bank")
  check(bank_matches(11),"first save preserves all authored bytes")
- check(not bank_dirty and undo_owner==nil and song_error==nil,
-  "first save establishes clean baseline")
+ check(bank_profile_kind==1 and bank_revision==37 and
+  io_project_name=="track one" and io_project_source=="fixture source" and
+  not bank_profile_is_active() and not bank_dirty and undo_owner==nil and
+  song_error==nil,"first save establishes exact clean baseline")
  local slot,generation=native_scan()
  check(slot==0 and generation==1,"first save selects record a")
 
@@ -176,7 +209,7 @@ function _init()
  check(bank_matches(23) and bank_profile_kind==0 and bank_revision==42 and
   io_project_name=="raw project" and io_project_source=="profile none",
   "profile-none round trip is exact")
- check(not bank_dirty and not bank_snapshot_valid and undo_owner==nil,
+ check(not bank_profile_is_active() and not bank_dirty and undo_owner==nil,
   "successful load establishes clean history baseline")
  check(song_error==nil,"successful load clears visible error")
 
@@ -189,17 +222,22 @@ function _init()
  check(bank_matches(11) and bank_profile_kind==1 and bank_revision==37 and
   io_project_name=="track one" and io_project_source=="fixture source",
   "fallback restores older track-one record")
+ check(not bank_profile_is_active() and not bank_dirty and undo_owner==nil,
+  "fallback load establishes exact clean baseline")
 
  -- Both invalid records reject atomically.
  native_real_reload(native_base,0,native_total,native_cart)
  poke(native_base+321,peek(native_base+321)^^1)
  native_real_cstore(0,native_base,native_record,native_cart)
- project(71,0,71,"live invalid","keep me") undo_owner="song"
+ project(71,0,71,"live invalid","keep me")
+ undo_owner="song" undo_width=-13 undo_dirty=false undo_addr=0x31f7
+ capture_live()
  check(not native_load() and song_error=="data cart invalid","both invalid reject visibly")
  check(bank_matches(71) and bank_dirty and bank_revision==71 and
   bank_profile_kind==0 and io_project_name=="live invalid" and
   io_project_source=="keep me" and undo_owner=="song",
   "invalid load preserves live project")
+ check(live_intact(),"invalid load preserves every live byte, profile, and redo state")
 
  -- Modular generation ordering handles alternation, wrap, and exact ties.
  write_record(0,3,29,1)
@@ -235,12 +273,15 @@ function _init()
  end
 
  -- A cancelled reload leaves both sentinels untouched and changes nothing.
- project(83,0,83,"cancel live","cancel source") undo_owner="sfx"
+ project(83,0,83,"cancel live","cancel source")
+ undo_owner="sfx" undo_width=-15 undo_dirty=false undo_addr=0x42f9
+ capture_live()
  native_reload_calls=0 native_reload_fault_call=1 native_reload_fault="noop"
  check(not native_save() and song_error=="data cart missing/cancelled",
   "cancelled save detected without return values")
  check(bank_matches(83) and bank_dirty and bank_revision==83 and
   undo_owner=="sfx","cancelled save preserves live project")
+ check(live_intact(),"cancelled save preserves every live byte, profile, and redo state")
  native_reload_calls=0
  check(not native_load() and song_error=="data cart missing/cancelled",
   "cancelled load detected without return values")
@@ -248,6 +289,8 @@ function _init()
  check(bank_matches(83) and bank_dirty and bank_revision==83 and
   io_project_name=="cancel live" and io_project_source=="cancel source" and
   undo_owner=="sfx","cancelled load preserves live project")
+ check(live_intact(),"cancelled load preserves every live byte, profile, and redo state")
+ check(record_matches(1,4,74),"cancelled operations preserve prior durable record")
 
  if failures==0 then printh("pocket tracker native store: passed")
  else printh("pocket tracker native store: failed "..failures) end

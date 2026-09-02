@@ -49,6 +49,73 @@ function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
+function productionReachability(symbol) {
+  const definitions = [];
+  const calls = [];
+  const occurrence = new RegExp(`\\b${symbol}\\s*\\(`, 'g');
+  const definition = new RegExp(`^\\s*function\\s+${symbol}\\s*\\(`);
+  for (const file of nativeFiles) {
+    const lines = read(file).toString('utf8').split('\n');
+    lines.forEach((line, index) => {
+      const count = [...line.matchAll(occurrence)].length;
+      if (!count) return;
+      const location = `${file}:${index + 1}`;
+      if (definition.test(line)) definitions.push(location);
+      for (let i = definition.test(line) ? 1 : 0; i < count; i++) calls.push(location);
+    });
+  }
+  assert.deepEqual(calls, [], `${symbol} gained a shipped production caller`);
+  assert.ok(definitions.length === 0 ||
+    definitions.length === 1 && definitions[0].startsWith('audio_bank.lua:'),
+  `${symbol} definition left its sole allowlisted production location`);
+  return {symbol, definitions, calls};
+}
+
+function symbolReferences(symbol) {
+  const references = [];
+  const occurrence = new RegExp(`\\b${symbol}\\b`);
+  for (const file of nativeFiles) {
+    read(file).toString('utf8').split('\n').forEach((line, index) => {
+      if (occurrence.test(line)) {
+        references.push({file, line: index + 1, source: line.trim()});
+      }
+    });
+  }
+  return references;
+}
+
+const snapshotAllowlist = {
+  bank_snapshot_base: [
+    ['audio_bank.lua', 'bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200'],
+    ['audio_bank.lua', 'return base==bank_audio_base or base==bank_stage_base or base==bank_snapshot_base'],
+    ['audio_bank.lua', 'memcpy(bank_snapshot_base,bank_audio_base,bank_size)'],
+    ['audio_bank.lua', 'memcpy(bank_audio_base,bank_snapshot_base,bank_size)'],
+  ],
+  bank_snapshot_valid: [
+    ['audio_bank.lua', 'bank_snapshot_valid,bank_snapshot_dirty=false,false'],
+    ['audio_bank.lua', 'bank_snapshot_valid=true'],
+    ['audio_bank.lua', 'if bank_profile_active or not bank_snapshot_valid then return false end'],
+    ['audio_bank.lua', 'bank_snapshot_valid=false'],
+    ['project_io.lua', 'bank_dirty=false bank_snapshot_valid=false undo_owner=nil'],
+  ],
+  bank_snapshot_dirty: [
+    ['audio_bank.lua', 'bank_snapshot_valid,bank_snapshot_dirty=false,false'],
+    ['audio_bank.lua', 'bank_snapshot_dirty=bank_dirty'],
+    ['audio_bank.lua', 'bank_dirty=bank_snapshot_dirty'],
+  ],
+};
+
+function snapshotLifecycle(symbol) {
+  const references = symbolReferences(symbol);
+  const actual = references.map(({file, source}) => [file, source]);
+  const allowed = snapshotAllowlist[symbol];
+  assert.ok(actual.length === 0 || actual.length === allowed.length,
+    `${symbol} is only allowed as the complete legacy lifecycle or fully removed`);
+  if (actual.length) assert.deepEqual(actual, allowed,
+    `${symbol} left the exact legacy snapshot lifecycle allowlist`);
+  return {symbol, references};
+}
+
 const cartSource = read('pocket-tracker.p8').toString('utf8');
 const cartIncludes = [...cartSource.matchAll(/^#include\s+(.+)$/gm)].map((match) => match[1]);
 assert.deepEqual(cartIncludes, nativeFiles,
@@ -65,6 +132,9 @@ assert.deepEqual(browserFrames, ['tracker.html'],
 const native = nativeFiles.map((file) => sourceMetrics(file, /^\s*--/));
 const browser = browserFiles.map((file) =>
   sourceMetrics(file, /^\s*(?:\/\/|\/\*|<!--)/));
+const reachability = ['bank_field', 'bank_copy', 'bank_rollback']
+  .map(productionReachability);
+const snapshotLifecycleReachability = Object.keys(snapshotAllowlist).map(snapshotLifecycle);
 const nativeTotal = sumMetrics(native);
 const browserTotal = sumMetrics(browser);
 assert.ok(nativeTotal.bytes <= 41898,
@@ -107,6 +177,8 @@ console.log(JSON.stringify({
   },
   native: {files: native, total: nativeTotal},
   browser: {files: browser, total: browserTotal},
+  reachability,
+  snapshotLifecycle: snapshotLifecycleReachability,
   pxa: {
     offset: `0x${pxaOffset.toString(16)}`,
     header: pxaHeader,

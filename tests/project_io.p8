@@ -6,6 +6,7 @@ __lua__
 playing=false
 audition_active=false
 undo_owner=nil
+undo_width,undo_dirty,undo_addr=-7,false,0x3199
 song_error=nil
 
 function _init() end
@@ -17,6 +18,32 @@ function stop_song() bank_profile_restore() playing=false return true end
 #include ../project_io.lua
 
 failures=0
+test_saved_base,test_live_base=0x9200,0xca94
+
+function capture_live()
+ memcpy(test_live_base,bank_audio_base,bank_size)
+ test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_is_active()
+ test_live_dirty,test_live_revision=bank_dirty,bank_revision
+ test_live_owner,test_live_width,test_live_undo_dirty,test_live_addr=
+  undo_owner,undo_width,undo_dirty,undo_addr
+ test_live_name,test_live_source=io_project_name,io_project_source
+ test_live_pattern=song_pattern
+ test_live_playing,test_live_audition=playing,audition_active
+end
+
+function live_intact()
+ for i=0,bank_size-1 do
+  if peek(bank_audio_base+i)!=peek(test_live_base+i) then return false end
+ end
+ return bank_profile_kind==test_live_profile and
+  bank_profile_is_active()==test_live_profile_active and
+  bank_dirty==test_live_dirty and bank_revision==test_live_revision and
+  undo_owner==test_live_owner and undo_width==test_live_width and
+  undo_dirty==test_live_undo_dirty and undo_addr==test_live_addr and
+  io_project_name==test_live_name and io_project_source==test_live_source and
+  song_pattern==test_live_pattern and playing==test_live_playing and
+  audition_active==test_live_audition
+end
 
 function check(ok,label)
  if ok then return end
@@ -48,14 +75,14 @@ end
 
 function saved_byte(offset)
  if offset<io_header_size then return peek(io_header+offset) end
- return peek(bank_snapshot_base+offset-io_header_size)
+ return peek(test_saved_base+offset-io_header_size)
 end
 
 function refresh_saved_envelope_crc()
  io_put16(io_header+10,0)
  local crc=0xffff
  for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
- for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(bank_snapshot_base+i)) end
+ for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(test_saved_base+i)) end
  io_put16(io_header+10,crc)
  return crc
 end
@@ -96,16 +123,18 @@ function _init()
 
  check(bank_profile_apply(),"save test profile applies")
  playing=true
- undo_owner="song"
+ undo_owner="song" undo_width=-9 undo_dirty=false undo_addr=0x31a7
  check(save_song(),"save starts")
  check(not playing and not bank_profile_is_active(),"save stops and restores authored bytes")
  check(io_mode=="save" and io_frame_valid(io_page_save),"save first frame")
  check(io_get16(io_gpio+10)==io_envelope_size,"save total length")
+ capture_live()
  io_begin_frame(io_error,io_id,io_sequence,io_offset,io_envelope_size,0,9)
  io_finish_frame()
  project_io_update()
  check(io_mode=="idle" and undo_owner=="song" and
   song_error=="browser save failed","failed save is visible and preserves history")
+ check(live_intact(),"failed save preserves exact live project and redo state")
  check(clipboard_intact(),"failed save preserves clipboard")
  check(waveform_intact(),"failed save preserves waveform")
  check(save_song(),"save retry starts")
@@ -134,18 +163,21 @@ function _init()
  check(waveform_intact(),"successful save preserves waveform")
 
  -- Preserve the saved bank as a fake browser peer, then mutate the live bank.
- memcpy(bank_snapshot_base,bank_audio_base,bank_size)
- local saved_first=peek(bank_snapshot_base)
+ memcpy(test_saved_base,bank_audio_base,bank_size)
+ local saved_first=peek(test_saved_base)
  poke(bank_audio_base,saved_first^^0x55)
+ bank_profile_kind=1 bank_dirty=true bank_revision=44
+ io_project_name="live name" io_project_source="live source" song_pattern=23
+ undo_owner="sfx" undo_width=-11 undo_dirty=false undo_addr=0x42f8
  local mutated_crc=bank_checksum(bank_audio_base)
 
- undo_owner="sfx"
  check(load_song(),"load request starts")
+ capture_live()
  emit_saved_page(0,0,true)
  check(io_mode=="idle" and io_frame_valid(io_error) and
   song_error=="load frame corrupt","corrupt gpio frame rejected visibly")
  check(bank_checksum(bank_audio_base)==mutated_crc,"corrupt frame preserves live bank")
- check(undo_owner=="sfx","failed load preserves history")
+ check(live_intact(),"corrupt frame preserves exact live project and redo state")
  check(clipboard_intact(),"failed load preserves clipboard")
  check(waveform_intact(),"failed load preserves waveform")
 
@@ -157,19 +189,30 @@ function _init()
  check(io_mode=="load" and io_frame_valid(io_ack) and io_offset==partial_offset,
        "duplicate load page acknowledged without reapply")
  check(bank_checksum(bank_audio_base)==mutated_crc,"partial page preserves live bank")
+ check(live_intact(),"partial page preserves exact live project and redo state")
  io_wait=600
  project_io_update()
  check(io_mode=="idle" and io_frame_valid(io_error) and
   song_error=="project transfer timeout","partial transfer times out visibly")
  check(bank_checksum(bank_audio_base)==mutated_crc,"partial timeout preserves live bank")
+ check(live_intact(),"partial timeout preserves exact live project and redo state")
 
  check(load_song(),"out-of-order load starts")
  emit_saved_page(1,first_length,false)
  check(io_mode=="idle" and io_frame_valid(io_error) and
   song_error=="load page out of order","out-of-order page rejected visibly")
  check(bank_checksum(bank_audio_base)==mutated_crc,"out-of-order page preserves live bank")
+ check(live_intact(),"out-of-order page preserves exact live project and redo state")
 
- check(bank_copy(bank_stage_base,bank_snapshot_base),"profile mutation stage copy")
+ check(load_song(),"unavailable browser slot load starts")
+ io_begin_frame(io_error,io_id,0,0,io_envelope_size,0,9)
+ io_finish_frame()
+ project_io_update()
+ check(io_mode=="idle" and io_frame_valid(io_error) and
+  song_error=="browser slot unavailable","unavailable browser slot rejected visibly")
+ check(live_intact(),"unavailable browser slot preserves exact live project and redo state")
+
+ memcpy(bank_stage_base,test_saved_base,bank_size)
  for kind in all({0,1,2}) do
   for version in all({0,1,2}) do
    for start in all({0,1,2}) do
@@ -197,6 +240,7 @@ function _init()
        "checksum-valid unknown profile tuple rejected")
  check(bank_checksum(bank_audio_base)==mutated_crc,
        "profile mutation preserves live bank")
+ check(live_intact(),"profile mutation preserves exact live project and redo state")
 
  -- The valid staged load commits the complete profile-none metadata atomically.
  poke(io_header+14,0) poke(io_header+15,0)
@@ -205,9 +249,6 @@ function _init()
  memset(io_header+16,0,16) memset(io_header+32,0,24)
  io_put_text(16,"raw import",15) io_put_text(32,"browser p8",23)
  refresh_saved_envelope_crc()
- io_project_name="live name" io_project_source="live source"
- bank_profile_kind=1 song_pattern=23 undo_owner="sfx"
-
  check(load_song(),"valid load starts")
  local offset=0
  local sequence=0
@@ -227,11 +268,11 @@ function _init()
   "valid load commits visible success state")
  check(bank_checksum(bank_audio_base)==saved_crc and peek(bank_audio_base)==saved_first,
        "valid load restores exact authored bank")
- check(bank_revision==41 and not bank_dirty and not bank_snapshot_valid,
+ check(bank_revision==41 and not bank_dirty and not bank_profile_is_active(),
        "valid load restores metadata and clean state")
  check(bank_profile_kind==0 and io_project_name=="raw import" and
   io_project_source=="browser p8" and song_pattern==0,"profile-none metadata committed")
- check(undo_owner==nil,"successful load clears history")
+ check(undo_owner==nil,"successful load clears undo and redo history")
  check(clipboard_intact(),"successful load preserves clipboard")
  check(waveform_intact(),"successful load restores waveform")
  check(io_prepare_envelope() and peek(io_header+14)==0 and peek(io_header+15)==0 and
