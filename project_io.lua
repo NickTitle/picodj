@@ -275,7 +275,7 @@ function io_commit_stage()
  bank_profile_kind=peek(io_header+14)
  io_project_name=io_get_text(16) io_project_source=io_get_text(32)
  song_pattern=peek(io_header+56) bank_revision=io_get16(io_header+12)
- bank_dirty=false bank_snapshot_valid=false undo_owner=nil
+ bank_dirty=false undo_owner=nil
  return true
 end
 
