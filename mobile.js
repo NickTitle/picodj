@@ -277,18 +277,21 @@ function p8Audio(bytes, representation) {
 
 function parseP8Audio(raw) {
   if (typeof raw !== 'string') return null;
-  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
-  const section = (name) => {
-    const start = lines.indexOf(name);
-    if (start < 0) return null;
-    const result = [];
-    for (let i = start + 1; i < lines.length && !/^__[a-z0-9_]+__$/.test(lines[i]); i++) {
-      if (lines[i] !== '') result.push(lines[i]);
+  const sections = {__music__: null, __sfx__: null};
+  const sidecars = [];
+  let active = null;
+  for (const line of raw.replace(/\r\n?/g, '\n').split('\n')) {
+    if (/^__[a-z0-9_]+__$/.test(line)) {
+      if (line === '__music__' || line === '__sfx__') {
+        if (sections[line]) return null;
+        active = sections[line] = [];
+      } else active = null;
+    } else {
+      if (line.includes('pocket-tracker-header')) sidecars.push(line);
+      if (active && line !== '') active.push(line);
     }
-    return result;
-  };
-  const music = section('__music__');
-  const sfx = section('__sfx__');
+  }
+  const music = sections.__music__, sfx = sections.__sfx__;
   if (!music || !sfx || music.length > 64 || sfx.length > 64) return null;
   const bank = new Uint8Array(projectEnvelopeSize - 64);
   for (let pattern = 0; pattern < 64; pattern++) {
@@ -324,8 +327,11 @@ function parseP8Audio(raw) {
       bank[base + row * 2 + 1] = word >> 8;
     }
   }
-  const headerMatch = raw.match(/^-- pocket-tracker-header: ([0-9a-f]{128})$/m);
-  return {bank, header: headerMatch ? hexBytes(headerMatch[1], 64) : null};
+  const headerMatch = sidecars.length === 1 &&
+    /^-- pocket-tracker-header: ([0-9a-f]{128})$/.exec(sidecars[0]);
+  if (sidecars.length && !headerMatch) return null;
+  return {bank, header: headerMatch ? hexBytes(headerMatch[1], 64) : null,
+    complete: music.length === 64 && sfx.length === 64};
 }
 
 function storeExactRecord(
@@ -719,24 +725,9 @@ function importProjectJson(raw, storage = localStorage) {
 }
 
 function importProjectP8(raw, storage = localStorage, filename = '') {
-  if (typeof raw !== 'string') return false;
-  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
-  const sidecars = lines.filter((line) => line.includes('pocket-tracker-header'));
-  const sectionValid = (name, complete) => {
-    const starts = lines.reduce((found, line, index) => line === name ? [...found, index] : found, []);
-    if (starts.length !== 1) return false;
-    let count = 0;
-    for (let i = starts[0] + 1; i < lines.length && !/^__[a-z0-9_]+__$/.test(lines[i]); i++) {
-      if (lines[i] !== '') count++;
-    }
-    return complete ? count === 64 : count <= 64;
-  };
-  if (sidecars.length > 0 &&
-      (sidecars.length !== 1 || !/^-- pocket-tracker-header: [0-9a-f]{128}$/.test(sidecars[0]))) return false;
-  const authenticated = sidecars.length === 1;
-  if (!sectionValid('__sfx__', authenticated) || !sectionValid('__music__', authenticated)) return false;
-  const parsed = parseP8Audio(lines.join('\n'));
-  if (!parsed || authenticated !== !!parsed.header) return false;
+  const parsed = parseP8Audio(raw);
+  if (!parsed || parsed.header && !parsed.complete) return false;
+  const authenticated = !!parsed.header;
   const bytes = new Uint8Array(projectEnvelopeSize);
   if (authenticated) bytes.set(parsed.header);
   else {
