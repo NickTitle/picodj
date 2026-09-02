@@ -170,11 +170,15 @@ for (let pass = 0; pass < 3; pass++) {
     `authored PICO-8 cycle ${pass + 1} remains byte-exact`);
 }
 
+localStorage.setItem('pocket-tracker:unaffected', 'byte-exact sentinel');
+const durableSnapshot = (storage) => Array.from(storage.values.entries());
 const p8Stable = localStorage.getItem(io.key);
 const rejectP8 = (raw, result, label) => {
+  const durableBefore = durableSnapshot(localStorage);
   const gpioBefore = gpio.slice();
   assert.equal(files.importProjectP8(raw), result, label);
-  assert.equal(localStorage.getItem(io.key), p8Stable, `${label} preserves durable slot`);
+  assert.deepEqual(durableSnapshot(localStorage), durableBefore,
+    `${label} preserves all durable data byte-exactly`);
   assert.deepEqual(gpio, gpioBefore, `${label} preserves live GPIO`);
 };
 const withHeader = (bytes, raw = authored) => raw.replace(
@@ -193,32 +197,83 @@ const partialSection = (name) => {
   lines.splice(lines.indexOf(name) + 1, 1);
   return lines.join('\n');
 };
+const oversizedSection = (raw, name) => {
+  const lines = raw.split('\n');
+  const start = lines.indexOf(name);
+  let end = start + 1;
+  while (end < lines.length && !/^__[a-z0-9_]+__$/.test(lines[end])) end++;
+  lines.splice(end, 0, lines[start + 1]);
+  return lines.join('\n');
+};
 const sidecar = authored.match(/^-- pocket-tracker-header: [0-9a-f]{128}$/m)[0];
-rejectP8(authored.replace(sidecar, `${sidecar}\n${sidecar}`), false, 'duplicate sidecar');
-rejectP8(authored.replace(sidecar, `${sidecar.slice(0, -1)}g`), false, 'malformed sidecar');
-rejectP8(authored.replace(sidecar, '-- pocket-tracker-header : malformed'), false,
-  'malformed header marker never downgrades');
-rejectP8(authored.replace('__sfx__', ''), false, 'missing SFX section');
-rejectP8(`${authored}\n__sfx__\n`, false, 'duplicate SFX section');
-rejectP8(authored.replace('__music__', ''), false, 'missing music section');
-rejectP8(`${authored}\n__music__\n`, false, 'duplicate music section');
-rejectP8(partialSection('__sfx__'), false, 'partial SFX section');
-rejectP8(partialSection('__music__'), false, 'partial music section');
-rejectP8(authored.replace(/^[0-9a-f]{168}$/m, (line) => `g${line.slice(1)}`), false,
-  'malformed SFX section');
-rejectP8(authored.replace(/^[0-9a-f]{2} [0-9a-f]{8}$/m, 'ff 00000000'), false,
-  'malformed music section');
-rejectP8(authored.replace(/^([0-9a-f]{8})([0-9a-f]{2})/m,
-  (_, metadata, pitch) => `${metadata}${pitch === '00' ? '01' : '00'}`), false,
-  'sidecar bank CRC mismatch');
-rejectP8(withHeader(envelope.slice().fill(0, 10, 12)), false, 'sidecar envelope CRC mismatch');
-rejectP8(checksumHeader((bytes) => { bytes[0] = 0; }), false, 'unknown envelope magic');
-rejectP8(checksumHeader((bytes) => { bytes[4] = 3; }), false, 'unknown envelope version');
-rejectP8(checksumHeader((bytes) => { bytes[6] = 0; }), false, 'wrong envelope length');
-rejectP8(checksumHeader((bytes) => { bytes[15] = 2; }), false, 'unknown profile version');
-rejectP8(checksumHeader((bytes) => { bytes[56] = 1; }), false, 'unknown source selection');
-rejectP8(checksumHeader((bytes) => { bytes[16] = 16; }), false, 'overlong project text');
-rejectP8(checksumHeader((bytes) => { bytes[8] ^= 1; }), false, 'sidecar bank checksum');
+const authenticatedRejections = [
+  ['duplicate sidecar', authored.replace(sidecar, `${sidecar}\n${sidecar}`)],
+  ['malformed sidecar', authored.replace(sidecar, `${sidecar.slice(0, -1)}g`)],
+  ['header marker spacing spoof', authored.replace(sidecar, '-- pocket-tracker-header : malformed')],
+  ['header marker code spoof', authored.replace(sidecar, 'print("pocket-tracker-header")')],
+  ['uppercase header downgrade spoof', authored.replace(sidecar,
+    `-- pocket-tracker-header: ${sidecar.slice(-128).toUpperCase()}`)],
+  ['valid plus malformed sidecar', authored.replace(sidecar,
+    `${sidecar}\n-- pocket-tracker-header: ${'0'.repeat(127)}g`)],
+  ['missing SFX section', authored.replace('__sfx__', '')],
+  ['duplicate SFX section', `${authored}\n__sfx__\n`],
+  ['oversized SFX section', oversizedSection(authored, '__sfx__')],
+  ['malformed SFX header', authored.replace('__sfx__', '__sfx_')],
+  ['missing music section', authored.replace('__music__', '')],
+  ['duplicate music section', `${authored}\n__music__\n`],
+  ['oversized music section', oversizedSection(authored, '__music__')],
+  ['malformed music header', authored.replace('__music__', '__MUSIC__')],
+  ['partial SFX section', partialSection('__sfx__')],
+  ['partial music section', partialSection('__music__')],
+  ['malformed SFX line', authored.replace(/^[0-9a-f]{168}$/m,
+    (line) => `g${line.slice(1)}`)],
+  ['malformed music line', authored.replace(/^[0-9a-f]{2} [0-9a-f]{8}$/m,
+    'ff 00000000')],
+  ['sidecar bank CRC mismatch', authored.replace(/^([0-9a-f]{8})([0-9a-f]{2})/m,
+    (_, metadata, pitch) => `${metadata}${pitch === '00' ? '01' : '00'}`)],
+  ['sidecar envelope CRC mismatch', withHeader(envelope.slice().fill(0, 10, 12))],
+  ['unknown envelope magic', checksumHeader((bytes) => { bytes[0] = 0; })],
+  ['unknown envelope version', checksumHeader((bytes) => { bytes[4] = 3; })],
+  ['wrong envelope length', checksumHeader((bytes) => { bytes[6] = 0; })],
+  ['unknown profile version', checksumHeader((bytes) => { bytes[15] = 2; })],
+  ['unknown source selection', checksumHeader((bytes) => { bytes[56] = 1; })],
+  ['overlong project text', checksumHeader((bytes) => { bytes[16] = 16; })],
+  ['sidecar bank checksum', checksumHeader((bytes) => { bytes[8] ^= 1; })],
+];
+for (const [label, raw] of authenticatedRejections) rejectP8(raw, false, label);
+
+const rawPartialSection = (name) => {
+  const lines = materialized.split('\n');
+  lines.splice(lines.indexOf(name) + 1, 1);
+  return lines.join('\n');
+};
+const validP8Matrix = [
+  ['authenticated LF', authored, 'authored.p8', true, envelope],
+  ['authenticated CRLF', authored.replace(/\n/g, '\r\n'), 'authored-crlf.p8', true, envelope],
+  ['authenticated reordered sections', reordered, 'reordered.p8', true, envelope],
+  ['headerless LF', materialized, 'materialized.p8', 'raw'],
+  ['headerless CRLF', materialized.replace(/\n/g, '\r\n'), 'materialized-crlf.p8', 'raw'],
+  ['headerless partial SFX', rawPartialSection('__sfx__'), 'partial-sfx.p8', 'raw'],
+  ['headerless partial music', rawPartialSection('__music__'), 'partial-music.p8', 'raw'],
+  ['headerless empty sections', '__sfx__\n__music__\n', '.p8', 'raw'],
+];
+for (const [label, raw, filename, result, exactEnvelope] of validP8Matrix) {
+  const storage = new MemoryStorage();
+  storage.setItem(io.key, p8Stable);
+  storage.setItem('pocket-tracker:unaffected', 'byte-exact sentinel');
+  const gpioBefore = gpio.slice();
+  assert.equal(files.importProjectP8(raw, storage, filename), result, label);
+  const stored = io.loadLastKnownGood(storage);
+  assert.equal(stored.length, 4672, `${label} stores one exact-size envelope`);
+  assert.equal(stored.slice(64).length, 4608, `${label} stores an exact-size audio bank`);
+  if (exactEnvelope) assert.deepEqual(Array.from(stored), Array.from(exactEnvelope),
+    `${label} round-trips the authenticated envelope byte-exactly`);
+  else assert.deepEqual(Array.from(stored.slice(64)), Array.from(io.parseP8Audio(raw).bank),
+    `${label} round-trips the 4,608-byte bank byte-exactly`);
+  assert.equal(storage.getItem('pocket-tracker:unaffected'), 'byte-exact sentinel',
+    `${label} preserves unrelated durable data`);
+  assert.deepEqual(gpio, gpioBefore, `${label} preserves live GPIO`);
+}
 
 const p8FaultStorage = new MemoryStorage();
 p8FaultStorage.setItem(io.key, p8Stable);
@@ -280,15 +335,30 @@ assert.equal(Buffer.from(fallback.slice(33, 56)).toString().replace(/\0.*$/, '')
 
 const rawStable = localStorage.getItem(io.key);
 const rejectRaw = (raw, label) => {
+  const durableBefore = durableSnapshot(localStorage);
   const gpioBefore = gpio.slice();
   assert.equal(files.importProjectP8(raw, localStorage, 'raw.p8'), false, label);
-  assert.equal(localStorage.getItem(io.key), rawStable, `${label} preserves durable slot`);
+  assert.deepEqual(durableSnapshot(localStorage), durableBefore,
+    `${label} preserves all durable data byte-exactly`);
   assert.deepEqual(gpio, gpioBefore, `${label} preserves GPIO`);
 };
-rejectRaw(`${materialized}\n__music__\n`, 'duplicate headerless music section');
-rejectRaw(materialized.replace('__sfx__', ''), 'missing headerless SFX section');
-rejectRaw(materialized.replace(/^[0-9a-f]{168}$/m, (line) => `g${line.slice(1)}`),
-  'malformed headerless SFX line');
+const headerlessRejections = [
+  ['duplicate headerless music section', `${materialized}\n__music__\n`],
+  ['duplicate headerless SFX section', `${materialized}\n__sfx__\n`],
+  ['missing headerless SFX section', materialized.replace('__sfx__', '')],
+  ['missing headerless music section', materialized.replace('__music__', '')],
+  ['oversized headerless SFX section', oversizedSection(materialized, '__sfx__')],
+  ['oversized headerless music section', oversizedSection(materialized, '__music__')],
+  ['malformed headerless SFX header', materialized.replace('__sfx__', '__sfx_')],
+  ['malformed headerless music header', materialized.replace('__music__', '__MUSIC__')],
+  ['malformed headerless SFX line', materialized.replace(/^[0-9a-f]{168}$/m,
+    (line) => `g${line.slice(1)}`)],
+  ['malformed headerless music line', materialized.replace(/^[0-9a-f]{2} [0-9a-f]{8}$/m,
+    'ff 00000000')],
+  ['headerless sidecar spoof', materialized.replace('-- representation: materialized',
+    '-- pocket-tracker-header: spoof')],
+];
+for (const [label, raw] of headerlessRejections) rejectRaw(raw, label);
 
 assert.equal(io.p8Audio(envelope, 'materialized'), materialized,
   'materialized PICO-8 encoding is deterministic');
