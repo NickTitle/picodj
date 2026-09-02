@@ -64,11 +64,6 @@ function io_prepare_envelope()
  return true
 end
 
-function io_envelope_byte(offset)
- if offset<io_header_size then return peek(io_header+offset) end
- return peek(bank_audio_base+offset-io_header_size)
-end
-
 function native_crc(base)
  local crc=0xffff
  for i=0,native_record-1 do
@@ -124,7 +119,7 @@ function native_save()
  for i=0,io_envelope_size-1 do
   if peek(base+8+i)!=peek(expected+i) then return io_fail("data cart read-back failed") end
  end
- bank_mark_clean() undo_owner=nil song_error=nil return true
+ bank_dirty=false undo_owner=nil song_error=nil return true
 end
 
 function native_load()
@@ -155,7 +150,11 @@ function io_emit_save_page()
  local flags=(io_offset==0 and 1 or 0)|
   (io_offset+length==io_envelope_size and 2 or 0)|4
  io_begin_frame(io_page_save,io_id,io_sequence,io_offset,io_envelope_size,length,flags)
- for i=0,length-1 do poke(io_gpio+16+i,io_envelope_byte(io_offset+i)) end
+ for i=0,length-1 do
+  local offset=io_offset+i
+  poke(io_gpio+16+i,offset<io_header_size and peek(io_header+offset) or
+   peek(bank_audio_base+offset-io_header_size))
+ end
  io_finish_frame()
  io_page_length=length
  io_page_last=(flags&2)!=0
@@ -292,7 +291,7 @@ function project_io_update()
   elseif io_frame_valid(io_ack) and peek(io_gpio+6)==io_id and
          peek(io_gpio+7)==io_sequence and io_get16(io_gpio+8)==io_offset then
    if io_page_last then
-    bank_mark_clean() undo_owner=nil io_mode="idle" io_emit_control(io_done,0)
+    bank_dirty=false undo_owner=nil io_mode="idle" io_emit_control(io_done,0)
     song_error=nil
    else
     io_offset+=io_page_length io_sequence=(io_sequence+1)%256
