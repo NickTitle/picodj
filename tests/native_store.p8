@@ -7,14 +7,13 @@ playing=false
 audition_active=false
 undo_owner=nil
 song_error=nil
-notice=""
 stop_song_calls=0
 stop_audition_calls=0
 
 function _init() end
 function _update60() end
 function context_label(name) return name end
-function say(text) notice=text end
+function say() end
 function stop_audition()
  stop_audition_calls+=1
  audition_active=false
@@ -151,7 +150,7 @@ function _init()
  check(not playing and not bank_profile_is_active() and stop_song_calls==1,
   "save stops once and restores authored bank")
  check(bank_matches(11),"first save preserves all authored bytes")
- check(not bank_dirty and undo_owner==nil and notice=="data cart saved",
+ check(not bank_dirty and undo_owner==nil and song_error==nil,
   "first save establishes clean baseline")
  local slot,generation=native_scan()
  check(slot==0 and generation==1,"first save selects record a")
@@ -180,6 +179,7 @@ function _init()
   "profile-none round trip is exact")
  check(not bank_dirty and not bank_snapshot_valid and undo_owner==nil,
   "successful load establishes clean history baseline")
+ check(song_error==nil,"successful load clears visible error")
 
  -- Corrupt newest B on disk; load must fall back to intact A.
  native_real_reload(native_base,0,native_total,native_cart)
@@ -196,7 +196,7 @@ function _init()
  poke(native_base+321,peek(native_base+321)^^1)
  native_real_cstore(0,native_base,native_record,native_cart)
  project(71,0,71,"live invalid","keep me") undo_owner="song"
- check(not native_load() and notice=="data cart invalid","both invalid reject")
+ check(not native_load() and song_error=="data cart invalid","both invalid reject visibly")
  check(bank_matches(71) and bank_dirty and bank_revision==71 and
   bank_profile_kind==0 and io_project_name=="live invalid" and
   io_project_source=="keep me" and undo_owner=="song",
@@ -238,12 +238,12 @@ function _init()
  -- A cancelled reload leaves both sentinels untouched and changes nothing.
  project(83,0,83,"cancel live","cancel source") undo_owner="sfx"
  native_reload_calls=0 native_reload_fault_call=1 native_reload_fault="noop"
- check(not native_save() and notice=="data cart missing/cancelled",
+ check(not native_save() and song_error=="data cart missing/cancelled",
   "cancelled save detected without return values")
  check(bank_matches(83) and bank_dirty and bank_revision==83 and
   undo_owner=="sfx","cancelled save preserves live project")
  native_reload_calls=0
- check(not native_load() and notice=="data cart missing/cancelled",
+ check(not native_load() and song_error=="data cart missing/cancelled",
   "cancelled load detected without return values")
  native_reload_fault_call=0 native_reload_fault=nil
  check(bank_matches(83) and bank_dirty and bank_revision==83 and

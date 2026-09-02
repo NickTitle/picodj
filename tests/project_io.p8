@@ -7,12 +7,11 @@ playing=false
 audition_active=false
 undo_owner=nil
 song_error=nil
-notice=""
 
 function _init() end
 function _update60() end
 function context_label(name) return name end
-function say(text) notice=text end
+function say() end
 function stop_audition() audition_active=false return true end
 function stop_song() bank_profile_restore() playing=false return true end
 
@@ -106,7 +105,8 @@ function _init()
  io_begin_frame(io_error,io_id,io_sequence,io_offset,io_envelope_size,0,9)
  io_finish_frame()
  project_io_update()
- check(io_mode=="idle" and undo_owner=="song","failed save preserves history")
+ check(io_mode=="idle" and undo_owner=="song" and
+  song_error=="browser save failed","failed save is visible and preserves history")
  check(clipboard_intact(),"failed save preserves clipboard")
  check(waveform_intact(),"failed save preserves waveform")
  check(save_song(),"save retry starts")
@@ -125,7 +125,8 @@ function _init()
   pages+=1
  end
  check(pages==42 and io_mode=="idle","save sends 42 acknowledged pages")
- check(not bank_dirty and notice=="browser slot saved","save read-back ack gates success")
+ check(not bank_dirty and io_frame_valid(io_done) and song_error==nil,
+  "save read-back ack gates visible success state")
  check(undo_owner==nil,"successful save clears history")
  check(io_get16(io_header+8)==saved_crc,"save header pins authored bank checksum")
  check(peek(io_header+14)==1 and peek(io_header+15)==1 and
@@ -142,7 +143,8 @@ function _init()
  undo_owner="sfx"
  check(load_song(),"load request starts")
  emit_saved_page(0,0,true)
- check(io_mode=="idle" and io_frame_valid(io_error),"corrupt gpio frame rejected")
+ check(io_mode=="idle" and io_frame_valid(io_error) and
+  song_error=="load frame corrupt","corrupt gpio frame rejected visibly")
  check(bank_checksum(bank_audio_base)==mutated_crc,"corrupt frame preserves live bank")
  check(undo_owner=="sfx","failed load preserves history")
  check(clipboard_intact(),"failed load preserves clipboard")
@@ -158,12 +160,14 @@ function _init()
  check(bank_checksum(bank_audio_base)==mutated_crc,"partial page preserves live bank")
  io_wait=600
  project_io_update()
- check(io_mode=="idle" and io_frame_valid(io_error),"partial transfer times out")
+ check(io_mode=="idle" and io_frame_valid(io_error) and
+  song_error=="project transfer timeout","partial transfer times out visibly")
  check(bank_checksum(bank_audio_base)==mutated_crc,"partial timeout preserves live bank")
 
  check(load_song(),"out-of-order load starts")
  emit_saved_page(1,first_length,false)
- check(io_mode=="idle" and io_frame_valid(io_error),"out-of-order page rejected")
+ check(io_mode=="idle" and io_frame_valid(io_error) and
+  song_error=="load page out of order","out-of-order page rejected visibly")
  check(bank_checksum(bank_audio_base)==mutated_crc,"out-of-order page preserves live bank")
 
  check(bank_copy(bank_stage_base,bank_snapshot_base),"profile mutation stage copy")
@@ -189,7 +193,8 @@ function _init()
  io_begin_frame(io_commit_load,io_id,0,0,io_envelope_size,0,0)
  io_finish_frame()
  project_io_update()
- check(io_mode=="idle" and io_frame_valid(io_error),
+ check(io_mode=="idle" and io_frame_valid(io_error) and
+       song_error=="load checksum failed",
        "checksum-valid unknown profile tuple rejected")
  check(bank_checksum(bank_audio_base)==mutated_crc,
        "profile mutation preserves live bank")
@@ -219,7 +224,8 @@ function _init()
  io_begin_frame(io_commit_load,io_id,sequence,offset,io_envelope_size,0,0)
  io_finish_frame()
  project_io_update()
- check(io_mode=="idle" and io_frame_valid(io_done),"valid load commits")
+ check(io_mode=="idle" and io_frame_valid(io_done) and song_error==nil,
+  "valid load commits visible success state")
  check(bank_checksum(bank_audio_base)==saved_crc and peek(bank_audio_base)==saved_first,
        "valid load restores exact authored bank")
  check(bank_revision==41 and not bank_dirty and not bank_snapshot_valid,
