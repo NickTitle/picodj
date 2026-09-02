@@ -118,14 +118,14 @@ function _init()
  setup(1) put(1,0,0x0a18) bank_project_init()
  ck(start_song(12),"play start") song_play_pattern=9
  calls=#music_calls
- ck(copy_rows(0,0) and #music_calls==calls and playing and bank_profile_is_active(),
+ ck(copy_rows(0,0) and #music_calls==calls and playing and bank_profile_active,
   "playing copy transport")
  ck((peek2(bank_clip_base)&0xffff)==0x0a18,"copy authored not boosted")
  sfx_number,sfx_row=5,0 rev=bank_revision calls=#music_calls
  ck(sfx_rows_begin(2) and sfx_rows_apply(),"playing paste")
  ck(bank_revision==rev+1 and #music_calls==calls+2 and
   music_calls[#music_calls-1][1]==-1 and music_calls[#music_calls][1]==9 and
-  playing and bank_profile_is_active(),"observed stop restart once")
+  playing and bank_profile_active,"observed stop restart once")
 
  -- Active preview is ended through its restore path before capture.
  local scratch=snap(bank_sfx_addr(63,0),bank_sfx_size)

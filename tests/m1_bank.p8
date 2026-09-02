@@ -109,13 +109,13 @@ function _init()
  check(bank_stage_commit(fixture_crc),"fixture staging commit")
  check(bank_equal(bank_audio_base,bank_stage_base),"fixture seed identity")
  check(bank_dirty and bank_revision==1,"commit dirty revision")
- bank_mark_clean()
+ bank_dirty=false
 
  -- Track 1 profile is temporary, complete, idempotent, and reversible.
  local profile_crc=bank_checksum(bank_audio_base)
  local profile_revision=bank_revision
  check(bank_profile_apply(),"profile apply")
- check(bank_profile_is_active(),"profile active")
+ check(bank_profile_active and bank_profile_kind==1,"profile active state")
  check_profile_words("profile first apply")
  check(bank_note_authored_raw(1,0)==peek2(bank_profile_base),
        "authored accessor ignores preview profile")
@@ -128,21 +128,23 @@ function _init()
        "profile blocks authored writes")
  check(bank_revision==active_revision,"profile rejection preserves revision")
  check_profile_words("profile rejection preserves preview")
- check(bank_revision==profile_revision and not bank_dirty,"profile does not dirty project")
+ check(bank_revision==profile_revision and not bank_dirty,
+       "profile apply and rejection preserve clean revision")
  check(bank_profile_restore(),"profile restore")
- check(not bank_profile_is_active(),"profile inactive")
+ check(not bank_profile_active and bank_profile_kind==1,"profile inactive state")
  check_restored_profile("profile restored")
  check_checksum(bank_audio_base,profile_crc,"profile checksum restored")
  check(bank_note_authored_raw(1,0)==raw_note(1,0),
        "authored accessor reads canonical when stopped")
  check(bank_profile_restore(),"profile second restore")
- check(bank_revision==profile_revision and not bank_dirty,"restore does not dirty project")
+ check(bank_revision==profile_revision and not bank_dirty,
+       "profile restore preserves clean revision")
 
  -- Profile-none playback performs no authored-bank or profile-scratch writes.
  memcpy(bank_stage_base,bank_audio_base,bank_size)
  local profile_saved=peek(bank_profile_base)
  bank_profile_kind=0
- check(bank_profile_apply() and not bank_profile_is_active(),"profile-none apply")
+ check(bank_profile_apply() and not bank_profile_active,"profile-none apply")
  check(test_equal(bank_audio_base,bank_stage_base,bank_size) and
   peek(bank_profile_base)==profile_saved,
   "profile-none performs zero writes")
@@ -162,7 +164,7 @@ function _init()
  memcpy(bank_stage_base,bank_audio_base,bank_size)
  bank_project_init()
  local wave_revision=bank_revision
- check(bank_profile_apply() and bank_profile_is_active(),"waveform profile apply")
+ check(bank_profile_apply() and bank_profile_active,"waveform profile apply")
  for sfx in all({1,4}) do
   local saved=bank_profile_base+(sfx-1)*64
   for i=0,63 do

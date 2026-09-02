@@ -74,7 +74,7 @@ end
 
 function capture_live()
  memcpy(test_live_base,bank_audio_base,bank_size)
- test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_is_active()
+ test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_active
  test_live_dirty,test_live_revision=bank_dirty,bank_revision
  test_live_owner,test_live_width,test_live_undo_dirty,test_live_addr=
   undo_owner,undo_width,undo_dirty,undo_addr
@@ -88,7 +88,7 @@ function live_intact()
   if peek(bank_audio_base+i)!=peek(test_live_base+i) then return false end
  end
  return bank_profile_kind==test_live_profile and
-  bank_profile_is_active()==test_live_profile_active and
+  bank_profile_active==test_live_profile_active and
   bank_dirty==test_live_dirty and bank_revision==test_live_revision and
   undo_owner==test_live_owner and undo_width==test_live_width and
   undo_dirty==test_live_undo_dirty and undo_addr==test_live_addr and
@@ -175,14 +175,15 @@ function _init()
  -- First save writes A at generation 1 and restores temporary profile bytes.
  project(11,1,37,"track one","fixture source")
  check(bank_profile_apply(),"profile applies before save")
- playing=true undo_owner="song"
+ playing=true undo_owner="song" undo_width=-9 undo_dirty=false undo_addr=0x31a7
  check(native_save(),"first save")
- check(not playing and not bank_profile_is_active() and stop_song_calls==1,
+ check(not playing and not bank_profile_active and stop_song_calls==1,
   "save stops once and restores authored bank")
  check(bank_matches(11),"first save preserves all authored bytes")
  check(bank_profile_kind==1 and bank_revision==37 and
   io_project_name=="track one" and io_project_source=="fixture source" and
-  not bank_profile_is_active() and not bank_dirty and undo_owner==nil and
+  not bank_profile_active and not bank_dirty and undo_owner==nil and
+  undo_width==-9 and not undo_dirty and undo_addr==0x31a7 and
   song_error==nil,"first save establishes exact clean baseline")
  local slot,generation=native_scan()
  check(slot==0 and generation==1,"first save selects record a")
@@ -204,12 +205,14 @@ function _init()
   "save stops active audition once")
  slot,generation=native_scan()
  check(slot==1 and generation==2,"second save alternates to record b")
- project(99,1,9,"temporary","temporary") undo_owner="song"
+ project(99,1,9,"temporary","temporary")
+ undo_owner="song" undo_width=-11 undo_dirty=false undo_addr=0x31a9
  check(native_load(),"load newest record")
  check(bank_matches(23) and bank_profile_kind==0 and bank_revision==42 and
   io_project_name=="raw project" and io_project_source=="profile none",
   "profile-none round trip is exact")
- check(not bank_profile_is_active() and not bank_dirty and undo_owner==nil,
+ check(not bank_profile_active and not bank_dirty and undo_owner==nil and
+  undo_width==-11 and not undo_dirty and undo_addr==0x31a9,
   "successful load establishes clean history baseline")
  check(song_error==nil,"successful load clears visible error")
 
@@ -217,12 +220,14 @@ function _init()
  native_real_reload(native_base,0,native_total,native_cart)
  poke(native_base+native_record+123,peek(native_base+native_record+123)^^1)
  native_real_cstore(native_record,native_base+native_record,native_record,native_cart)
- project(77,0,77,"live","unchanged") undo_owner="sfx"
+ project(77,0,77,"live","unchanged")
+ undo_owner="sfx" undo_width=-13 undo_dirty=false undo_addr=0x42f8
  check(native_load(),"corrupt newest falls back")
  check(bank_matches(11) and bank_profile_kind==1 and bank_revision==37 and
   io_project_name=="track one" and io_project_source=="fixture source",
   "fallback restores older track-one record")
- check(not bank_profile_is_active() and not bank_dirty and undo_owner==nil,
+ check(not bank_profile_active and not bank_dirty and undo_owner==nil and
+  undo_width==-13 and not undo_dirty and undo_addr==0x42f8,
   "fallback load establishes exact clean baseline")
 
  -- Both invalid records reject atomically.

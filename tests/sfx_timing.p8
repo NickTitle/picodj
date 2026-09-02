@@ -36,7 +36,7 @@ function raw_fixture_checks()
 end
 function finish()
  ck(not stat(57),"music stopped")
- ck(not bank_profile_is_active(),"profile restored")
+ ck(not bank_profile_active,"profile restored")
  ck((bank_checksum(bank_audio_base)&0xffff)==original_crc,"authored bank restored")
  if fails==0 then printh("pocket tracker sfx timing: passed")
  else printh("pocket tracker sfx timing: failed "..fails) end
@@ -69,7 +69,7 @@ function _update60()
    ck(saw_fast_end,"faster right channel ended first")
    ck(saw_loop,"looping right channel stayed active")
    ck(ticks<=3,"case1 next pattern tick")
-   ck(bank_profile_is_active(),"profile active across handoff")
+   ck(bank_profile_active,"profile active across handoff")
    phase=2 max_tick=-1 max_right_row=-1 max_len_row=-1 saw_loop=false
   elseif not active and max_tick>=0 then ck(false,"case1 stopped early") finish() end
  elseif phase==2 then

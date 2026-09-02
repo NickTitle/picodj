@@ -36,22 +36,22 @@ function _init()
  local scratch=snap(bank_sfx_addr(63,0),bank_sfx_size)
  local raw=snap(bank_audio_base,bank_size)
  bank_profile_kind=0
- ck(start_song(0) and playing and not bank_profile_is_active(),"raw profile start")
+ ck(start_song(0) and playing and not bank_profile_active,"raw profile start")
  ck(same(bank_audio_base,raw,bank_size) and song_status()=="p00 r00 clean raw all a----",
   "raw playback zero writes status")
  local calls=#music_calls revision=bank_revision
  ck(song_restore_then(function() return bank_write(bank_song_addr(0,0),1,2) end),"raw active edit")
  raw[1]=2
  ck(#music_calls==calls+2 and same(bank_audio_base,raw,bank_size) and
-  bank_revision==revision+1 and playing and not bank_profile_is_active(),"raw edit restart once")
+  bank_revision==revision+1 and playing and not bank_profile_active,"raw edit restart once")
  stop_song()
  poke(bank_song_addr(0,0),0x81)
  bank_profile_kind=1 bank_project_init() music_calls={}
  ck(start_song(0) and start_song(0),"idempotent play")
- ck(bank_profile_is_active() and song_status()=="p00 r00 clean +2 all a----",
+ ck(bank_profile_active and song_status()=="p00 r00 clean +2 all a----",
   "single boosted start")
  ck(start_audition(0),"row preview")
- ck(not playing and not bank_profile_is_active(),"preview stops restores music")
+ ck(not playing and not bank_profile_active,"preview stops restores music")
  ck(song_status()=="preview clean +2 all a----","preview status")
  ck(same(bank_sfx_addr(1,0),authored,bank_sfx_size*4),"sfx 1-4 exact")
  ck(peek2(bank_sfx_addr(63,0))==peek2(bank_note_addr(1,0)),"row copied to scratch")
@@ -63,10 +63,10 @@ function _init()
   song_status()=="preview clean +2 all a----","preview observes native start")
  stats[46+preview_channel]=-1
  update_playhead()
- ck(not audition_active and playing and bank_profile_is_active() and
+ ck(not audition_active and playing and bank_profile_active and
   song_status()=="p00 r00 clean +2 all a----","preview completion resumes status")
  ck(same(bank_sfx_addr(63,0),scratch,bank_sfx_size),"scratch restored")
- ck(playing and bank_profile_is_active() and #music_calls==3,"music resumed")
+ ck(playing and bank_profile_active and #music_calls==3,"music resumed")
  sfx_number=63
  ck(start_audition() and stop_audition(true),"whole reserved sfx preview")
  stop_song()
@@ -76,7 +76,7 @@ function _init()
  local old=bank_note_authored_raw(1,0)
  ck(song_restore_then(function() return bank_write(bank_note_addr(1,0),2,old^^1) end),
   "active edit")
- ck(playing and bank_profile_is_active() and bank_note_authored_raw(1,0)==(old^^1),
+ ck(playing and bank_profile_active and bank_note_authored_raw(1,0)==(old^^1),
   "stop restore edit restart")
  local filter=bank_sfx_filter(1,1)
  ck(song_restore_then(function()
@@ -84,14 +84,14 @@ function _init()
   return bank_write(addr,1,peek(addr)+(1-filter*2)*bank_filter_steps[1])
  end),
   "active filter edit")
- ck(playing and bank_profile_is_active() and bank_sfx_filter(1,1)==1-filter,
+ ck(playing and bank_profile_active and bank_sfx_filter(1,1)==1-filter,
   "filter stop restore edit restart")
  local sample_addr=bank_sfx_addr(0,0)
  calls=#music_calls revision=bank_revision
  ck(song_restore_then(function() return bank_write(sample_addr,1,0x80) end),
   "active waveform edit")
  ck(#music_calls==calls+2 and peek(sample_addr)==0x80 and
-  bank_revision==revision+1 and playing and bank_profile_is_active(),
+  bank_revision==revision+1 and playing and bank_profile_active,
   "waveform stop restore edit restart once")
  local bass_addr=bank_sfx_addr(0,65) local bass=peek(bass_addr)
  calls=#music_calls revision=bank_revision
@@ -99,14 +99,14 @@ function _init()
   "active waveform bass edit")
  ck(#music_calls==calls+2 and peek(bass_addr)==(bass^^1) and
   (peek(bass_addr)&0xfe)==(bass&0xfe) and bank_revision==revision+1 and
-  playing and bank_profile_is_active(),"bass stop restore edit restart once")
+  playing and bank_profile_active,"bass stop restore edit restart once")
  for slot in all({0,7}) do
   local wave_filter=bank_sfx_addr(slot,64) local filter_old=peek(wave_filter)
   calls=#music_calls revision=bank_revision
   ck(song_restore_then(function() return bank_write(wave_filter,1,filter_old+8) end),
    "active waveform filter edit "..slot)
   ck(#music_calls==calls+2 and bank_sfx_filter(slot,3)==1 and
-   bank_revision==revision+1 and playing and bank_profile_is_active(),
+   bank_revision==revision+1 and playing and bank_profile_active,
    "waveform filter restart exact "..slot)
  end
  poke2(bank_clip_base,0x1234) sfx_clip_count=1
@@ -115,10 +115,10 @@ function _init()
  ck(song_restore_then(function() return bank_rows(1,0,1,bank_clip_base,true) end),
   "active batch edit")
  ck(#music_calls==calls+2 and bank_revision==revision+1 and
-  bank_note_authored_raw(1,0)==0x1234 and playing and bank_profile_is_active(),
+  bank_note_authored_raw(1,0)==0x1234 and playing and bank_profile_active,
   "batch stop restore restart once")
  stats[57]=false transport_tick=3 update_playhead()
- ck(not playing and not bank_profile_is_active(),"native stop restores profile")
+ ck(not playing and not bank_profile_active,"native stop restores profile")
  start_song(0)
  stats[57]=true stats[54]=12 stats[55]=7 stats[56]=99
  for ch=0,3 do stats[46+ch]=ch+1 stats[50+ch]=ch+4 end
@@ -159,7 +159,7 @@ function _init()
   "profile waveform sample edit")
  wave[0x100+68+1]=wave_old^^1
  ck(#music_calls==calls+2 and peek(wave_addr)==(wave_old^^1) and
-  bank_revision==revision+1 and bank_profile_is_active(),
+  bank_revision==revision+1 and bank_profile_active,
   "profile waveform sample restart exact")
  local wave_bass=bank_sfx_addr(1,65) local bass_old=peek(wave_bass)
  calls=#music_calls revision=bank_revision
@@ -167,7 +167,7 @@ function _init()
   "profile waveform bass edit")
  wave[0x100+68+66]=bass_old^^1
  ck(#music_calls==calls+2 and peek(wave_bass)==(bass_old^^1) and
-  bank_revision==revision+1 and bank_profile_is_active(),
+  bank_revision==revision+1 and bank_profile_active,
   "profile waveform bass restart exact")
  for slot in all({1,4}) do
   local wave_filter=bank_sfx_addr(slot,64) local filter_old=peek(wave_filter)
@@ -176,7 +176,7 @@ function _init()
    "profile waveform filter edit "..slot)
   wave[0x100+slot*68+65]=filter_old+24
   ck(#music_calls==calls+2 and bank_sfx_filter(slot,4)==1 and
-   bank_revision==revision+1 and bank_profile_is_active(),
+   bank_revision==revision+1 and bank_profile_active,
    "profile waveform filter restart exact "..slot)
  end
  local wave_mode=bank_sfx_addr(4,66) local mode_old=peek(wave_mode)
@@ -185,14 +185,14 @@ function _init()
   "profile waveform notes mode edit")
  wave[0x100+4*68+67]=mode_old&0x7f
  ck(#music_calls==calls+2 and not bank_sfx_is_waveform(4) and
-  bank_revision==revision+1 and bank_profile_is_active(),
+  bank_revision==revision+1 and bank_profile_active,
   "profile notes mode restart exact")
  calls=#music_calls revision=bank_revision
  ck(song_restore_then(function() return bank_write(wave_mode,1,mode_old|0x80) end),
   "profile waveform wave mode edit")
  wave[0x100+4*68+67]=mode_old|0x80
  ck(#music_calls==calls+2 and bank_sfx_is_waveform(4) and
-  bank_revision==revision+1 and bank_profile_is_active(),
+  bank_revision==revision+1 and bank_profile_active,
   "profile wave mode restart exact")
  stop_song()
  ck(same(bank_audio_base,wave,bank_size),"profile waveform complete restore")
@@ -242,7 +242,7 @@ function _init()
  stop_song()
  ck(same(bank_audio_base,bank,bank_size) and bank_dirty==dirty and
   bank_revision==revision and undo_owner==owner and undo_width==width and
-  not bank_profile_is_active(),"mix preserves project history profile")
+  not bank_profile_active,"mix preserves project history profile")
  if fails==0 then printh("pocket tracker playback transport: passed")
  else printh("pocket tracker playback transport: failed "..fails) end
  extcmd("shutdown")

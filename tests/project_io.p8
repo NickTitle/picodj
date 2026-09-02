@@ -45,7 +45,7 @@ end
 
 function capture_live()
  memcpy(test_live_base,bank_audio_base,bank_size)
- test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_is_active()
+ test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_active
  test_live_dirty,test_live_revision=bank_dirty,bank_revision
  test_live_owner,test_live_width,test_live_undo_dirty,test_live_addr=
   undo_owner,undo_width,undo_dirty,undo_addr
@@ -59,7 +59,7 @@ function live_intact()
   if peek(bank_audio_base+i)!=peek(test_live_base+i) then return false end
  end
  return bank_profile_kind==test_live_profile and
-  bank_profile_is_active()==test_live_profile_active and
+  bank_profile_active==test_live_profile_active and
   bank_dirty==test_live_dirty and bank_revision==test_live_revision and
   undo_owner==test_live_owner and undo_width==test_live_width and
   undo_dirty==test_live_undo_dirty and undo_addr==test_live_addr and
@@ -99,6 +99,11 @@ end
 function saved_byte(offset)
  if offset<io_header_size then return peek(io_header+offset) end
  return peek(test_saved_base+offset-io_header_size)
+end
+
+function prepared_byte(offset)
+ if offset<io_header_size then return peek(io_header+offset) end
+ return peek(bank_audio_base+offset-io_header_size)
 end
 
 function refresh_saved_envelope_crc()
@@ -175,6 +180,11 @@ function _init()
   memcpy(bank_sfx_addr(sfx,0),bank_sfx_addr(0,0),bank_sfx_size)
  end
  poke2(bank_sfx_addr(8,0),0x8a58)
+ -- Distinct sentinels pin header/bank, page, and final partial-page boundaries.
+ poke(bank_audio_base,0x91)
+ poke(bank_audio_base+47,0x2f) poke(bank_audio_base+48,0x30)
+ poke(bank_audio_base+bank_size-80,0xa0)
+ poke(bank_audio_base+bank_size-1,0xfe)
  sfx_clip_count=17
  for i=0,63 do poke(bank_clip_base+i,(i*37+11)&0xff) end
  check(bank_clip_base+63<bank_batch_base and bank_batch_base+63<io_header and
@@ -192,7 +202,9 @@ function _init()
  playing=true
  undo_owner="song" undo_width=-9 undo_dirty=false undo_addr=0x31a7
  check(save_song(),"save starts")
- check(not playing and not bank_profile_is_active(),"save stops and restores authored bytes")
+ check(not playing and not bank_profile_active and
+  bank_checksum(bank_audio_base)==saved_crc,
+  "save stops profile and restores exact authored bytes")
  check(io_mode=="save" and io_frame_valid(io_page_save),"save first frame")
  check(io_get16(io_gpio+10)==io_envelope_size,"save total length")
  capture_live()
@@ -212,7 +224,21 @@ function _init()
   local length=peek(io_gpio+12)
   check(io_frame_valid(io_page_save),"save page crc "..pages)
   for i=0,length-1 do
-   check(peek(io_gpio+16+i)==io_envelope_byte(offset+i),"save payload "..offset+i)
+   check(peek(io_gpio+16+i)==prepared_byte(offset+i),"save payload "..offset+i)
+  end
+  if offset==0 then
+   check(length==112 and peek(io_gpio+16)==0x50 and
+    peek(io_gpio+16+63)==0 and peek(io_gpio+16+64)==0x91 and
+    peek(io_gpio+16+111)==0x2f,"save first/header/page-boundary byte vector")
+  elseif offset==112 then
+   check(length==112 and peek(io_gpio+16)==0x30,
+    "save page-boundary continuation byte vector")
+  elseif offset+length==io_envelope_size then
+   check(offset==4592 and length==80 and peek(io_gpio+16)==0xa0 and
+    peek(io_gpio+16+length-1)==0xfe,"save final partial-envelope byte vector")
+   check(bank_dirty and undo_owner=="song" and undo_width==-9 and
+    not undo_dirty and undo_addr==0x31a7,
+    "save stays dirty with history until final acknowledgement")
   end
   io_begin_frame(io_ack,io_id,sequence,offset,io_envelope_size,0,0)
   io_finish_frame()
@@ -222,7 +248,8 @@ function _init()
  check(pages==42 and io_mode=="idle","save sends 42 acknowledged pages")
  check(not bank_dirty and io_frame_valid(io_done) and song_error==nil,
   "save read-back ack gates visible success state")
- check(undo_owner==nil,"successful save clears history")
+ check(undo_owner==nil and undo_width==-9 and not undo_dirty and
+  undo_addr==0x31a7,"successful save establishes exact clean history baseline")
  check(io_get16(io_header+8)==saved_crc,"save header pins authored bank checksum")
  check(peek(io_header+14)==1 and peek(io_header+15)==1 and
   peek(io_header+57)==1 and peek(io_header+58)==4,"save preserves track-1 tuple")
@@ -335,11 +362,12 @@ function _init()
   "valid load commits visible success state")
  check(bank_checksum(bank_audio_base)==saved_crc and peek(bank_audio_base)==saved_first,
        "valid load restores exact authored bank")
- check(bank_revision==41 and not bank_dirty and not bank_profile_is_active(),
+ check(bank_revision==41 and not bank_dirty and not bank_profile_active,
        "valid load restores metadata and clean state")
  check(bank_profile_kind==0 and io_project_name=="raw import" and
   io_project_source=="browser p8" and song_pattern==0,"profile-none metadata committed")
- check(undo_owner==nil,"successful load clears undo and redo history")
+ check(undo_owner==nil and undo_width==-11 and not undo_dirty and
+  undo_addr==0x42f8,"successful load establishes exact clean history baseline")
  check(clipboard_intact(),"successful load preserves clipboard")
  check(waveform_intact(),"successful load restores waveform")
  check(io_prepare_envelope() and peek(io_header+14)==0 and peek(io_header+15)==0 and

@@ -182,7 +182,7 @@ function _init()
  sfx_row=1 sfx_field=1
  ck(sfx_begin_edit(),"playing begin") edit_value=(edit_value+1)%256
  ck(edit_commit() and #music_calls==calls+2 and music_calls[#music_calls-1][1]==-1 and
-  music_calls[#music_calls][1]==0 and playing and bank_profile_is_active(),
+  music_calls[#music_calls][1]==0 and playing and bank_profile_active,
   "playing edit restarts once")
  ck(bank_revision==1 and bank_checksum(bank_audio_base)!=fixture_crc,
   "playing edit touches once")
@@ -193,7 +193,7 @@ function _init()
  calls=#music_calls
  ck(sfx_begin_edit(),"playing bass begin") edit_value=1
  ck(edit_commit() and #music_calls==calls+2 and music_calls[#music_calls-1][1]==-1 and
-  music_calls[#music_calls][1]==0 and playing and bank_profile_is_active(),
+  music_calls[#music_calls][1]==0 and playing and bank_profile_active,
   "playing bass restarts once")
  ck(bank_sfx_meta_raw(0,1)==0x11 and bank_revision==1,
   "playing bass touches once")
