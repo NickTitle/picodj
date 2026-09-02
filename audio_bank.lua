@@ -1,7 +1,7 @@
 -- pocket tracker native pico-8 audio bank core
 
 bank_audio_base,bank_song_base,bank_sfx_base=0x3100,0x3100,0x3200
-bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200
+bank_size,bank_stage_base=0x1200,0x8000
 bank_profile_base,bank_audition_base=0xa400,0xa500
 bank_clip_base,bank_batch_base=0xa544,0xa584
 bank_audition_sfx,bank_audition_channel,bank_profile_kind=63,3,1
@@ -15,7 +15,7 @@ function bank_int(v,lo,hi)
 end
 
 function bank_region(base)
- return base==bank_audio_base or base==bank_stage_base or base==bank_snapshot_base
+ return base==bank_audio_base or base==bank_stage_base
 end
 
 function bank_touch()
@@ -27,7 +27,6 @@ function bank_project_init()
  if bank_audition_saved then bank_audition_restore() end
  if bank_profile_active then bank_profile_restore() end
  bank_dirty,bank_revision=false,0
- bank_snapshot_valid,bank_snapshot_dirty=false,false
  bank_profile_active,bank_audition_saved=false,false
 end
 
@@ -80,17 +79,6 @@ function bank_swap(addr,size)
  end
  bank_touch()
  return true
-end
-
-function bank_field(addr,width,shift,mask,value)
- if not bank_span(addr,width) or width>2 or (width==2 and addr<bank_sfx_base) or
-  not bank_int(shift,0,width*8-1) or not bank_int(mask,0,255) then
-  if value==nil then return end return false
- end
- local raw=width==1 and peek(addr) or peek2(addr)
- if value==nil then return (raw>>shift)&mask end
- if not bank_int(value,0,mask) then return false end
- return bank_write(addr,width,(raw&(0xffff^^(mask<<shift)))|(value<<shift))
 end
 
 function bank_note_authored_raw(sfx,row)
@@ -169,36 +157,12 @@ function bank_checksum_matches(base,expected)
  return actual!=nil and (actual&0xffff)==(expected&0xffff)
 end
 
--- memcpy ordering: destination, source.
-function bank_copy(destination,source)
- if not bank_region(destination) or not bank_region(source) then return false end
- -- Only staging is writable through the public bulk-copy path. Commit and
- -- rollback exclusively own canonical and snapshot writes.
- if destination!=bank_stage_base then return false end
- if bank_profile_active and source==bank_audio_base then return false end
- if bank_equal(destination,source) then return true end
- memcpy(destination,source,bank_size)
- return true
-end
-
 function bank_stage_commit(expected)
  if bank_profile_active or
     not bank_checksum_matches(bank_stage_base,expected) then return false end
  if bank_equal(bank_audio_base,bank_stage_base) then return true end
- memcpy(bank_snapshot_base,bank_audio_base,bank_size)
- bank_snapshot_valid=true
- bank_snapshot_dirty=bank_dirty
  memcpy(bank_audio_base,bank_stage_base,bank_size)
  bank_touch()
- return true
-end
-
-function bank_rollback()
- if bank_profile_active or not bank_snapshot_valid then return false end
- memcpy(bank_audio_base,bank_snapshot_base,bank_size)
- bank_snapshot_valid=false
- bank_revision+=1
- bank_dirty=bank_snapshot_dirty
  return true
 end
 
