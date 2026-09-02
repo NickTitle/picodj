@@ -258,12 +258,13 @@ const legacyLibraryTransaction = `function storeProjectLibrary(library, storage 
 
 `;
 const sharedExactRecordTransaction = `function storeExactRecord(
-  storage, key, candidate, accept, expected, verifyRestore
+  storage, key, makeRecord, accept, expected, verifyRestore
 ) {
   let previous;
   try {
     previous = storage.getItem(key);
     if (expected !== undefined && previous !== expected) return 'changed';
+    const candidate = makeRecord();
     storage.setItem(key, candidate);
     if (accept(storage.getItem(key))) return 'stored';
   } catch (_) {}
@@ -284,7 +285,7 @@ const sharedCanonicalLibraryRecord = `function canonicalProjectLibraryRecord(raw
 `;
 const sharedLastKnownGoodTransaction = `function storeLastKnownGood(bytes, storage = localStorage) {
   if (!envelopeValid(bytes)) return false;
-  return storeExactRecord(storage, projectStoreKey, envelopeRecord(bytes),
+  return storeExactRecord(storage, projectStoreKey, () => envelopeRecord(bytes),
     (raw) => sameBytes(parseEnvelopeRecord(raw), bytes), undefined, false) === 'stored';
 }
 
@@ -293,7 +294,7 @@ const sharedLibraryTransaction = `function storeProjectLibrary(library, storage 
   if (projectTransferActive() || uncertainLibraryStorage.has(storage)) return false;
   const candidate = projectLibraryRecord(library);
   if (!canonicalProjectLibraryRecord(candidate)) return false;
-  const state = storeExactRecord(storage, projectLibraryKey, candidate,
+  const state = storeExactRecord(storage, projectLibraryKey, () => candidate,
     canonicalProjectLibraryRecord, expectedRaw, true);
   if (state === 'uncertain') uncertainLibraryStorage.add(storage);
   return state === 'stored';
