@@ -23,21 +23,38 @@ const cart = {
   addEventListener(type, listener) { cartListeners.set(type, listener); },
 };
 const fileStatus = {textContent: '', style: {}};
+const libraryStatus = {textContent: '', style: {}};
+let importClicks = 0;
 const projectImport = {
   files: [], value: '',
   addEventListener(type, listener) { outerListeners.set(`project-import:${type}`, listener); },
+  click() { importClicks++; },
 };
-const control = {
-  hidden: true,
-  addEventListener() {},
-  setAttribute() {},
-};
+function control(name, values = {}) {
+  return {
+    ...values,
+    addEventListener(type, listener) { outerListeners.set(`${name}:${type}`, listener); },
+    setAttribute(attribute, value) { this[attribute] = String(value); },
+  };
+}
+const fileToggle = control('file-toggle');
+const filePanel = control('file-panel', {hidden: true});
+const projectLibraryPanel = control('project-library');
+const libraryProject = control('library-project', {value: ''});
+const libraryRevision = control('library-revision', {value: ''});
+const controlFallback = control('fallback');
 const document = {
   querySelector(selector) {
     if (selector === '#cart') return cart;
+    if (selector === '#file-toggle') return fileToggle;
+    if (selector === '#file-panel') return filePanel;
     if (selector === '#project-import') return projectImport;
     if (selector === '#file-status') return fileStatus;
-    return control;
+    if (selector === '#library-project') return libraryProject;
+    if (selector === '#library-revision') return libraryRevision;
+    if (selector === '#project-library-status') return libraryStatus;
+    if (selector === '#project-library') return projectLibraryPanel;
+    return controlFallback;
   },
   createElement() { throw new Error('outer document must remain untouched'); },
 };
@@ -48,14 +65,29 @@ const localStorage = {
   removeItem(key) { stored.delete(key); },
 };
 
+const raf = [];
+const globalObject = {};
 vm.runInNewContext(source, {
   Blob,
   URL,
   document,
+  globalThis: globalObject,
   localStorage,
-  requestAnimationFrame() {},
+  requestAnimationFrame(callback) { raf.push(callback); },
   setTimeout() {},
 });
+
+const legacyMobileHooks = [
+  'PocketTrackerProjectIO',
+  'PocketTrackerLibrary',
+  'PocketTrackerFileIO',
+];
+const legacyDefinitionsPresent = legacyMobileHooks.every((name) =>
+  source.includes(`globalThis.${name} = Object.freeze(`));
+assert.deepEqual(legacyMobileHooks.map((name) => Object.hasOwn(globalObject, name)),
+  legacyMobileHooks.map(() => legacyDefinitionsPresent),
+  'the shipped VM exposes either the exact legacy browser hooks or none of them');
+assert.equal(typeof raf[0], 'function', 'the shipped project bridge starts through requestAnimationFrame');
 
 assert.equal(typeof cartListeners.get('load'), 'function');
 assert.equal(appended.length, 1);
@@ -84,6 +116,25 @@ assert.equal(frameListeners.has('keydown'), false);
 assert.equal(frameListeners.has('touchstart'), false);
 cartListeners.get('load')();
 assert.equal(appended.length, 1, 'installation is idempotent');
+
+outerListeners.get('file-toggle:click')();
+assert.equal(filePanel.hidden, false, 'Files opens through its shipped click listener');
+assert.equal(fileToggle['aria-expanded'], 'true');
+outerListeners.get('file-panel:click')({target: {
+  closest(selector) { return selector === '[data-file-action]' ? {dataset: {fileAction: 'json'}} : null; },
+}});
+assert.match(fileStatus.textContent, /No valid browser slot/,
+  'export runs through the Files event path without a test API');
+outerListeners.get('file-panel:click')({target: {
+  closest(selector) { return selector === '[data-file-action]' ? {dataset: {fileAction: 'import'}} : null; },
+}});
+assert.equal(importClicks, 1, 'the Files import action reaches the hidden input through DOM events');
+outerListeners.get('project-library:click')({target: {
+  closest(selector) { return selector === '[data-library-action]' ? {dataset: {libraryAction: 'new'}} : null; },
+}});
+assert.match(libraryStatus.textContent, /Could not add a project/,
+  'library actions run through the shipped panel listener without a test API');
+
 const importChange = outerListeners.get('project-import:change');
 assert.equal(typeof importChange, 'function');
 projectImport.files = [{name: 'headerless.P8', text: async () => '__sfx__\n__music__\n'}];

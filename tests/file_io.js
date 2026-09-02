@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {withMobileTestHooks} = require('./browser_test_hooks');
 
 class MemoryStorage {
   constructor() { this.values = new Map(); }
@@ -36,9 +37,8 @@ const sandbox = {
   setTimeout() {},
 };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync('mobile.js', 'utf8'), sandbox);
-const io = sandbox.PocketTrackerProjectIO;
-const files = sandbox.PocketTrackerFileIO;
+vm.runInContext(withMobileTestHooks(fs.readFileSync('mobile.js', 'utf8')), sandbox);
+const {projectIO: io, fileIO: files} = sandbox.__PocketTrackerTestHooks;
 
 function put16(bytes, offset, value) {
   bytes[offset] = value & 255;

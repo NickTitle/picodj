@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const {withHelpTestHooks} = require('./browser_test_hooks');
 
 class Target {
   constructor(id, document) {
@@ -56,10 +57,11 @@ const localStorage = Object.freeze({
   setItem() { throw new Error('help must not write storage'); },
   removeItem() { throw new Error('help must not remove storage'); },
 });
-const source = fs.readFileSync('help.js', 'utf8');
+const source = withHelpTestHooks(fs.readFileSync('help.js', 'utf8'));
 const globalObject = {};
 vm.runInNewContext(source, {document, globalThis: globalObject, localStorage, pico8_gpio: gpio,
   requestAnimationFrame(callback) { callback(); }});
+const help = globalObject.__PocketTrackerTestHooks.help;
 
 const html = fs.readFileSync('index.html', 'utf8');
 assert.match(html, /<button id="help-toggle"[^>]*aria-haspopup="dialog"[^>]*aria-expanded="false"[^>]*aria-controls="help-dialog"/);
@@ -129,15 +131,15 @@ assert.equal(document.activeElement, helpToggle, 'touch close restores opener fo
 const detachedOpener = new Target('detached', document);
 detachedOpener.isConnected = false;
 detachedOpener.focus();
-globalObject.PocketTrackerHelp.open();
+help.open();
 helpDialog.dispatch('keydown', {key: 'Escape', preventDefault() {}});
 assert.equal(document.activeElement, helpToggle, 'a disconnected opener falls back to Help');
 
 const removedDuringHelp = new Target('removed-during-help', document);
 removedDuringHelp.focus();
-globalObject.PocketTrackerHelp.open();
+help.open();
 removedDuringHelp.isConnected = false;
-globalObject.PocketTrackerHelp.close();
+help.close();
 assert.equal(document.activeElement, helpToggle, 'an opener removed while help is open falls back to Help');
 
 assert.deepEqual(Array.from(gpio), new Array(128).fill(0), 'help never mutates live GPIO');
