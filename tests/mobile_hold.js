@@ -5,6 +5,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('mobile.js', 'utf8');
+const html = fs.readFileSync('index.html', 'utf8');
+assert.match(html, /<p id="project-library-status" role="status" aria-live="polite">/,
+  'the library status remains an independent polite live region');
+assert.match(html, /<p id="file-status" role="status" aria-live="polite">/,
+  'the Files status remains an independent polite live region');
 const frameListeners = new Map();
 const cartListeners = new Map();
 const outerListeners = new Map();
@@ -123,8 +128,10 @@ assert.equal(fileToggle['aria-expanded'], 'true');
 outerListeners.get('file-panel:click')({target: {
   closest(selector) { return selector === '[data-file-action]' ? {dataset: {fileAction: 'json'}} : null; },
 }});
-assert.match(fileStatus.textContent, /No valid browser slot/,
-  'export runs through the Files event path without a test API');
+assert.equal(fileStatus.textContent, 'No valid browser slot. Save in the tracker first.',
+  'failed export reports its exact Files message through the shipped event path');
+assert.equal(fileStatus.style.color, '#ff8a8a', 'failed export uses the exact failure color');
+assert.equal(libraryStatus.textContent, '', 'Files failure does not update the library live region');
 outerListeners.get('file-panel:click')({target: {
   closest(selector) { return selector === '[data-file-action]' ? {dataset: {fileAction: 'import'}} : null; },
 }});
@@ -132,17 +139,93 @@ assert.equal(importClicks, 1, 'the Files import action reaches the hidden input 
 outerListeners.get('project-library:click')({target: {
   closest(selector) { return selector === '[data-library-action]' ? {dataset: {libraryAction: 'new'}} : null; },
 }});
-assert.match(libraryStatus.textContent, /Could not add a project/,
-  'library actions run through the shipped panel listener without a test API');
+assert.equal(libraryStatus.textContent,
+  'Could not add a project. Save in the tracker first, free a project slot, or check browser storage.',
+  'failed library action reports its exact message through the shipped event path');
+assert.equal(libraryStatus.style.color, '#ff8a8a', 'failed library action uses the exact failure color');
+assert.equal(fileStatus.textContent, 'No valid browser slot. Save in the tracker first.',
+  'library failure does not update the Files live region');
 
 const importChange = outerListeners.get('project-import:change');
 assert.equal(typeof importChange, 'function');
 projectImport.files = [{name: 'headerless.P8', text: async () => '__sfx__\n__music__\n'}];
 Promise.resolve(importChange()).then(() => {
-  assert.match(fileStatus.textContent, /Imported audio sections as no profile/);
-  assert.equal(fileStatus.style.color, '#c9c9de');
+  assert.equal(fileStatus.textContent,
+    'Imported audio sections as no profile; external Lua is not included. Choose Load in the tracker.',
+  'successful import reports its exact Files message through the shipped change event');
+  assert.equal(fileStatus.style.color, '#c9c9de', 'successful import uses the exact normal color');
+  assert.match(libraryStatus.textContent, /Could not add a project/,
+    'Files success does not update the library live region');
+  outerListeners.get('project-library:click')({target: {
+    closest(selector) { return selector === '[data-library-action]' ? {dataset: {libraryAction: 'new'}} : null; },
+  }});
+  assert.equal(libraryStatus.textContent, 'Saved browser slot as project 1.',
+    'successful library action reports its exact message through the shipped event path');
+  assert.equal(libraryStatus.style.color, '#c9c9de', 'successful library action uses the exact normal color');
+  assert.match(fileStatus.textContent, /Imported audio sections as no profile/,
+    'library success does not update the Files live region');
   console.log('pocket tracker mobile hold: passed');
 }).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+function assertMissingStatusNoop(missingSelector, listenerKey, actionAttribute, datasetKey, action) {
+  const listeners = new Map();
+  const nodes = new Map();
+  function node(selector) {
+    if (!nodes.has(selector)) nodes.set(selector, {
+      hidden: true,
+      files: [],
+      value: '',
+      style: {},
+      addEventListener(type, listener) { listeners.set(`${selector}:${type}`, listener); },
+      setAttribute() {},
+      click() {},
+    });
+    return nodes.get(selector);
+  }
+  const optionalCart = {
+    contentDocument: {
+      head: {appendChild() {}},
+      createElement() { return {}; },
+      getElementById() { return null; },
+      addEventListener() {},
+    },
+    contentWindow: {},
+    addEventListener() {},
+  };
+  const optionalDocument = {
+    querySelector(selector) {
+      if (selector === missingSelector) return null;
+      if (selector === '#cart') return optionalCart;
+      return node(selector);
+    },
+    createElement() { return {click() {}, remove() {}}; },
+    body: {appendChild() {}},
+  };
+  const optionalStorage = {
+    getItem() { return null; },
+    setItem() {},
+    removeItem() {},
+  };
+  vm.runInNewContext(source, {
+    Blob,
+    URL,
+    document: optionalDocument,
+    localStorage: optionalStorage,
+    requestAnimationFrame() {},
+    setTimeout() {},
+  });
+  const listener = listeners.get(listenerKey);
+  assert.equal(typeof listener, 'function');
+  assert.doesNotThrow(() => listener({target: {
+    closest(selector) {
+      return selector === actionAttribute ? {dataset: {[datasetKey]: action}} : null;
+    },
+  }}), `${missingSelector} is an optional no-op through its shipped event path`);
+}
+
+assertMissingStatusNoop('#file-status', '#file-panel:click', '[data-file-action]', 'fileAction', 'json');
+assertMissingStatusNoop('#project-library-status', '#project-library:click',
+  '[data-library-action]', 'libraryAction', 'new');

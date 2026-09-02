@@ -153,6 +153,67 @@ function browserHookLifecycle() {
   };
 }
 
+const legacyStatusSetters = `function setFileStatus(message, failed = false) {
+  if (!fileStatus) return;
+  fileStatus.textContent = message;
+  fileStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
+}
+
+function setLibraryStatus(message, failed = false) {
+  if (!libraryStatus) return;
+  libraryStatus.textContent = message;
+  libraryStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
+}
+`;
+const sharedStatusSetter = `function setStatus(target, message, failed = false) {
+  if (!target) return;
+  target.textContent = message;
+  target.style.color = failed ? '#ff8a8a' : '#c9c9de';
+}
+`;
+
+function statusSetterLifecycle() {
+  const source = read('mobile.js').toString('utf8');
+  const legacyCount = source.split(legacyStatusSetters).length - 1;
+  const sharedCount = source.split(sharedStatusSetter).length - 1;
+  assert.ok(legacyCount === 1 && sharedCount === 0 || legacyCount === 0 && sharedCount === 1,
+    'status mutation must use the exact legacy pair or the exact accepted shared setter');
+  const legacyCalls = {
+    file: (source.match(/\bsetFileStatus\(/g) || []).length,
+    library: (source.match(/\bsetLibraryStatus\(/g) || []).length,
+  };
+  const sharedCalls = (source.match(/\bsetStatus\(/g) || []).length;
+  if (legacyCount) {
+    assert.deepEqual(legacyCalls, {file: 4, library: 11},
+      'legacy status setter definitions/calls differ from the complete allowlist');
+    assert.equal(sharedCalls, 0, 'status setter migration is partial');
+  } else {
+    assert.deepEqual(legacyCalls, {file: 0, library: 0}, 'legacy status setter survived migration');
+    assert.equal(sharedCalls, 14, 'shared status setter definition/calls differ from the allowlist');
+    assert.equal((source.match(/setStatus\(fileStatus, /g) || []).length, 3,
+      'Files status call-site allowlist changed');
+    assert.equal((source.match(/setStatus\(libraryStatus, /g) || []).length, 10,
+      'library status call-site allowlist changed');
+  }
+  const mutationCounts = {
+    text: (source.match(/\.textContent = message;/g) || []).length,
+    color: (source.match(/\.style\.color = failed \? '#ff8a8a' : '#c9c9de';/g) || []).length,
+  };
+  assert.deepEqual(mutationCounts, legacyCount ? {text: 2, color: 2} : {text: 1, color: 1},
+    'status text/color mutation logic was duplicated outside the accepted shape');
+  assert.equal(Buffer.byteLength(legacyStatusSetters), 361,
+    'legacy status setter gross-byte ledger changed');
+  assert.equal(Buffer.byteLength(sharedStatusSetter), 166,
+    'accepted shared status setter byte shape changed');
+  return {
+    legacy: Boolean(legacyCount),
+    grossBytes: 361,
+    legacyCalls,
+    sharedCalls,
+    mutationCounts,
+  };
+}
+
 function productionReachability(symbol) {
   const definitions = [];
   const calls = [];
@@ -344,6 +405,7 @@ const microHelperReachability = Object.keys(microHelperAllowlists).map(microHelp
 const shippedComments = shippedCommentInventory();
 const nativeCrcPolynomialReferences = nativeCrcPolynomial();
 const browserTestHooks = browserHookLifecycle();
+const statusSetters = statusSetterLifecycle();
 const nativeTotal = sumMetrics(native);
 const browserTotal = sumMetrics(browser);
 assert.ok(nativeTotal.bytes <= 41898,
@@ -392,6 +454,7 @@ console.log(JSON.stringify({
   shippedComments,
   nativeCrcPolynomial: nativeCrcPolynomialReferences,
   browserTestHooks,
+  statusSetters,
   pxa: {
     offset: `0x${pxaOffset.toString(16)}`,
     header: pxaHeader,

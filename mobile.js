@@ -772,16 +772,10 @@ function exportStoredFile(kind, storage = localStorage) {
   return download(new Blob([p8], {type: 'text/plain'}), filename);
 }
 
-function setFileStatus(message, failed = false) {
-  if (!fileStatus) return;
-  fileStatus.textContent = message;
-  fileStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
-}
-
-function setLibraryStatus(message, failed = false) {
-  if (!libraryStatus) return;
-  libraryStatus.textContent = message;
-  libraryStatus.style.color = failed ? '#ff8a8a' : '#c9c9de';
+function setStatus(target, message, failed = false) {
+  if (!target) return;
+  target.textContent = message;
+  target.style.color = failed ? '#ff8a8a' : '#c9c9de';
 }
 
 function selectedLibraryId(select) {
@@ -844,15 +838,15 @@ function initializeProjectLibrary() {
   const initial = migrateProjectLibrary();
   renderProjectLibrary();
   if (initial.state === 'migrated') {
-    setLibraryStatus('Migrated the valid browser slot into project 1. The tracker is unchanged.');
+    setStatus(libraryStatus, 'Migrated the valid browser slot into project 1. The tracker is unchanged.');
   } else if (initial.state === 'recovered') {
-    setLibraryStatus('Recovered older valid revisions. Corrupt stored copies remain untouched.', true);
+    setStatus(libraryStatus, 'Recovered older valid revisions. Corrupt stored copies remain untouched.', true);
   } else if (initial.state === 'invalid') {
-    setLibraryStatus('The library record is invalid and was not changed. The browser slot is still available.', true);
+    setStatus(libraryStatus, 'The library record is invalid and was not changed. The browser slot is still available.', true);
   } else if (initial.state === 'fault') {
-    setLibraryStatus('Browser storage is unavailable. No project data was changed.', true);
+    setStatus(libraryStatus, 'Browser storage is unavailable. No project data was changed.', true);
   } else if (initial.state === 'uncertain') {
-    setLibraryStatus('Library storage integrity is uncertain. Reload before making changes.', true);
+    setStatus(libraryStatus, 'Library storage integrity is uncertain. Reload before making changes.', true);
   }
 }
 
@@ -867,7 +861,7 @@ filePanel?.addEventListener('click', (event) => {
   if (!action) return;
   if (action === 'import') { projectImport.click(); return; }
   const ok = exportStoredFile(action);
-  setFileStatus(ok ? 'Download created from the checksum-verified browser slot.' :
+  setStatus(fileStatus, ok ? 'Download created from the checksum-verified browser slot.' :
     'No valid browser slot. Save in the tracker first.', !ok);
 });
 
@@ -884,21 +878,21 @@ projectLibraryPanel?.addEventListener('click', (event) => {
   const revisionId = selectedLibraryId(libraryRevision);
   if (action === 'stage') {
     const ok = stageLibraryRevision(projectId, revisionId);
-    setLibraryStatus(ok ? 'Revision staged in the browser slot. Choose Load in the tracker to commit it.' :
+    setStatus(libraryStatus, ok ? 'Revision staged in the browser slot. Choose Load in the tracker to commit it.' :
       'Could not stage that revision. Library, browser slot, and tracker are unchanged.', !ok);
     return;
   }
   if (action === 'new') {
     const id = addLibraryProject();
     renderProjectLibrary(id || 0);
-    setLibraryStatus(id ? `Saved browser slot as project ${id}.` :
+    setStatus(libraryStatus, id ? `Saved browser slot as project ${id}.` :
       'Could not add a project. Save in the tracker first, free a project slot, or check browser storage.', !id);
     return;
   }
   if (action === 'revision') {
     const id = addLibraryRevision(projectId);
     renderProjectLibrary(projectId, typeof id === 'number' ? id : revisionId);
-    setLibraryStatus(id === 'duplicate' ? 'The newest saved revision already matches the browser slot.' : id ?
+    setStatus(libraryStatus, id === 'duplicate' ? 'The newest saved revision already matches the browser slot.' : id ?
       id === 'cancelled' ? 'Revision save cancelled. Nothing changed.' :
       id === 'changed' ? 'Project data changed before the save could commit. Nothing was overwritten.' :
       `Saved revision ${id}; only the newest ${projectLibraryMaxRevisions} copies are retained.` :
@@ -908,7 +902,7 @@ projectLibraryPanel?.addEventListener('click', (event) => {
   if (action === 'reset') {
     const result = resetProjectLibrary();
     renderProjectLibrary();
-    setLibraryStatus(result === 'cancelled' ? 'Library reset cancelled. Nothing changed.' :
+    setStatus(libraryStatus, result === 'cancelled' ? 'Library reset cancelled. Nothing changed.' :
       result === 'changed' ? 'Library data changed before reset. Nothing was overwritten.' : result ?
       'Browser project library reset. The tracker and last-known-good slot are unchanged.' :
       'Could not reset the browser library. Stored data is unchanged.', !result);
@@ -917,7 +911,7 @@ projectLibraryPanel?.addEventListener('click', (event) => {
   const result = confirmLibraryDelete(action, projectId, revisionId);
   if (result !== 'cancelled') renderProjectLibrary();
   const feedback = libraryDeleteFeedback(result);
-  setLibraryStatus(feedback.message, feedback.failed);
+  setStatus(libraryStatus, feedback.message, feedback.failed);
 });
 
 projectImport?.addEventListener('change', async () => {
@@ -926,12 +920,12 @@ projectImport?.addEventListener('change', async () => {
   if (!file) return;
   let raw;
   try { raw = await file.text(); } catch (_) {
-    setFileStatus('Could not read that project file. The browser slot is unchanged.', true);
+    setStatus(fileStatus, 'Could not read that project file. The browser slot is unchanged.', true);
     return;
   }
   const p8 = /\.p8$/i.test(file.name);
   const ok = p8 ? importProjectP8(raw, localStorage, file.name) : importProjectJson(raw);
-  setFileStatus(ok ? (ok === 'raw' ?
+  setStatus(fileStatus, ok ? (ok === 'raw' ?
     'Imported audio sections as no profile; external Lua is not included. Choose Load in the tracker.' : p8 ?
     'Imported authored .p8. Choose Load in the tracker.' :
     'Imported to the browser slot. Choose Load in the tracker to commit it.') :
