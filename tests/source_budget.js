@@ -115,6 +115,51 @@ function microHelperLifecycle(symbol) {
   return {symbol, references};
 }
 
+const redundantNativeHeaders = [
+  ['audio_bank.lua', '-- pocket tracker native pico-8 audio bank core'],
+  ['tracker.lua', '-- shared six-button input and menus for the native tracker'],
+  ['song_ui.lua', '-- native song/pattern screen'],
+  ['sfx_ui.lua', '-- native 64-slot, 32-row sfx editor'],
+  ['project_io.lua', '-- browser last-known-good project bridge'],
+];
+const retainedSafetyComments = [
+  ['audio_bank.lua', '-- crc-16/ccitt-false: poly 0x1021, init 0xffff, no reflection/xorout.'],
+  ['audio_bank.lua', '-- the result is a signed pico-8 16-bit bit pattern; mask with 0xffff when'],
+  ['audio_bank.lua', '-- presenting it outside the vm.'],
+  ['audio_bank.lua', '-- SFX 63 is a reversible scratch slot; preview never dirties the project.'],
+  ['pocket-tracker-data.p8',
+    '-- pocket tracker fixed data cart; project records occupy cart bytes 0x0000..0x248f'],
+];
+
+function shippedCommentInventory() {
+  const comments = [];
+  for (const file of [...nativeFiles, 'pocket-tracker-data.p8']) {
+    read(file).toString('utf8').split('\n').forEach((line, index) => {
+      if (line.trim().startsWith('--')) {
+        comments.push({file, line: index + 1, source: line.trim()});
+      }
+    });
+  }
+  const actual = comments.map(({file, source}) => [file, source]);
+  const legacy = [redundantNativeHeaders[0], ...retainedSafetyComments.slice(0, 4),
+    ...redundantNativeHeaders.slice(1), retainedSafetyComments[4]];
+  assert.ok(JSON.stringify(actual) === JSON.stringify(legacy) ||
+    JSON.stringify(actual) === JSON.stringify(retainedSafetyComments),
+  'shipped comments must be the exact legacy inventory or retain only safety comments');
+  const presentHeaders = redundantNativeHeaders.map(([file, source]) =>
+    comments.find((comment) => comment.file === file && comment.source === source));
+  assert.ok(presentHeaders.every(Boolean) || presentHeaders.every((comment) => !comment),
+    'redundant native headers must be completely present or completely absent');
+  for (const comment of presentHeaders.filter(Boolean)) {
+    assert.equal(comment.line, 1, `${comment.file} redundant header moved from line one`);
+  }
+  const redundantBytes = redundantNativeHeaders.reduce((total, [, source]) =>
+    total + Buffer.byteLength(source + '\n'), 0);
+  assert.equal(redundantBytes, 217, 'redundant native header byte inventory changed');
+  return {redundantHeaders: redundantNativeHeaders, redundantBytes,
+    retainedSafety: retainedSafetyComments, comments};
+}
+
 const snapshotAllowlist = {
   bank_snapshot_base: [
     ['audio_bank.lua', 'bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200'],
@@ -192,6 +237,7 @@ const reachability = ['bank_field', 'bank_copy', 'bank_rollback']
   .map(productionReachability);
 const snapshotLifecycleReachability = Object.keys(snapshotAllowlist).map(snapshotLifecycle);
 const microHelperReachability = Object.keys(microHelperAllowlists).map(microHelperLifecycle);
+const shippedComments = shippedCommentInventory();
 const nativeCrcPolynomialReferences = nativeCrcPolynomial();
 const nativeTotal = sumMetrics(native);
 const browserTotal = sumMetrics(browser);
@@ -238,6 +284,7 @@ console.log(JSON.stringify({
   reachability,
   snapshotLifecycle: snapshotLifecycleReachability,
   microHelpers: microHelperReachability,
+  shippedComments,
   nativeCrcPolynomial: nativeCrcPolynomialReferences,
   pxa: {
     offset: `0x${pxaOffset.toString(16)}`,

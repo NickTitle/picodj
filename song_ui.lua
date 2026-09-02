@@ -1,4 +1,3 @@
--- native song/pattern screen
 
 song_expected_crc,song_rows=0x2a23,10
 song_menu_items=split"sfx,mute,flow,mix,undo,play,follow"

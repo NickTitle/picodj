@@ -1,4 +1,3 @@
--- shared six-button input and menus for the native tracker
 
 hold_frames=18
 dpad_hold,dpad_pressed={0,0,0,0},{}
