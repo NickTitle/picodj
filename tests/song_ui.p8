@@ -241,13 +241,17 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  song_pattern=63
  song_channel=3
  song_scroll=54
+ local prior_status=song_status()
  song_open_sfx()
- check(app_view=="sfx" and sfx_pattern==63 and sfx_channel==3 and
-       sfx_number==(raw_song(63,3)&0x3f),"sfx handoff identity")
+ check(app_view=="sfx" and sfx_number==(raw_song(63,3)&0x3f) and
+       sfx_row==0 and sfx_scroll==0 and sfx_field==1 and sfx_mode=="rows",
+       "sfx handoff shipped state")
+ check(song_status()==prior_status,"sfx handoff preserves song status")
  action_gate=false reset_action_input()
  song_return_from_sfx()
  check(song_pattern==63 and song_channel==3 and song_scroll==54,
        "sfx return preserves song cursor")
+ check(song_status()==prior_status,"sfx return preserves song status")
 
  -- SONG's own X hold opens context; a quick release stays on native SONG.
  reset_ui()

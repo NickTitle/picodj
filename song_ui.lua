@@ -59,7 +59,6 @@ function start_audition(row_only)
   return false
  end
  audition_active=true
- audition_tick=0
  audition_seen=false
  native_sfx(bank_audition_sfx,bank_audition_channel,0,row_only!=nil and 1 or nil)
  song_error=nil
@@ -86,7 +85,6 @@ end
 function update_playhead()
  transport_tick+=1
  if audition_active then
-  audition_tick+=1
   local current=native_stat(46+bank_audition_channel)
   if current==bank_audition_sfx then audition_seen=true
   elseif audition_seen then
@@ -202,8 +200,6 @@ function song_begin_edit(field)
 end
 
 function song_open_sfx()
- sfx_pattern=song_pattern
- sfx_channel=song_channel
  sfx_number=peek(bank_song_addr(song_pattern,song_channel))&0x3f
  app_view="sfx"
  sfx_row,sfx_scroll,sfx_field=0,0,1
