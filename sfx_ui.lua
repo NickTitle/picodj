@@ -1,4 +1,3 @@
--- native 64-slot, 32-row sfx editor
 
 sfx_fields,sfx_field_x,sfx_field_shift,sfx_field_mask=
  split"pitch,inst,custom,volume,effect","\16\32\40\48\56","\0\6\15\9\12","\63\7\1\7\7"

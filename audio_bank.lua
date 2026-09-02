@@ -1,4 +1,3 @@
--- pocket tracker native pico-8 audio bank core
 
 bank_audio_base,bank_song_base,bank_sfx_base=0x3100,0x3100,0x3200
 bank_size,bank_stage_base=0x1200,0x8000

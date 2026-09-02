@@ -1,4 +1,3 @@
--- browser last-known-good project bridge
 
 io_gpio,io_header,io_header_size=0x5f80,0xa5c4,64
 io_envelope_size,io_payload_size=io_header_size+bank_size,112
