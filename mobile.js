@@ -328,20 +328,29 @@ function parseP8Audio(raw) {
   return {bank, header: headerMatch ? hexBytes(headerMatch[1], 64) : null};
 }
 
-function storeLastKnownGood(bytes, storage = localStorage) {
-  if (!envelopeValid(bytes)) return false;
+function storeExactRecord(
+  storage, key, makeRecord, accept, expected, verifyRestore
+) {
   let previous;
   try {
-    previous = storage.getItem(projectStoreKey);
-    storage.setItem(projectStoreKey, envelopeRecord(bytes));
-    const readBack = parseEnvelopeRecord(storage.getItem(projectStoreKey));
-    if (sameBytes(readBack, bytes)) return true;
+    previous = storage.getItem(key);
+    if (expected !== undefined && previous !== expected) return 'changed';
+    const candidate = makeRecord();
+    storage.setItem(key, candidate);
+    if (accept(storage.getItem(key))) return 'stored';
   } catch (_) {}
   try {
-    if (previous === null || previous === undefined) storage.removeItem(projectStoreKey);
-    else storage.setItem(projectStoreKey, previous);
+    if (previous === null || previous === undefined) storage.removeItem(key);
+    else storage.setItem(key, previous);
+    if (!verifyRestore || storage.getItem(key) === (previous ?? null)) return 'failed';
   } catch (_) {}
-  return false;
+  return 'uncertain';
+}
+
+function storeLastKnownGood(bytes, storage = localStorage) {
+  if (!envelopeValid(bytes)) return false;
+  return storeExactRecord(storage, projectStoreKey, () => envelopeRecord(bytes),
+    (raw) => sameBytes(parseEnvelopeRecord(raw), bytes), undefined, false) === 'stored';
 }
 
 function loadLastKnownGood(storage = localStorage) {
@@ -407,6 +416,11 @@ function parseProjectLibrary(raw) {
 
 function projectLibraryRecord(library) { return JSON.stringify(library); }
 
+function canonicalProjectLibraryRecord(raw) {
+  const parsed = parseProjectLibrary(raw);
+  return parsed && !parsed.recovered && projectLibraryRecord(parsed.library) === raw;
+}
+
 function loadProjectLibrary(storage = localStorage) {
   if (uncertainLibraryStorage.has(storage)) {
     return {state: 'uncertain', library: emptyProjectLibrary(), recovered: false, raw: null};
@@ -426,26 +440,11 @@ function loadProjectLibrary(storage = localStorage) {
 function storeProjectLibrary(library, storage = localStorage, expectedRaw) {
   if (projectTransferActive() || uncertainLibraryStorage.has(storage)) return false;
   const candidate = projectLibraryRecord(library);
-  const checked = parseProjectLibrary(candidate);
-  if (!checked || checked.recovered || projectLibraryRecord(checked.library) !== candidate) return false;
-  let previous;
-  try {
-    previous = storage.getItem(projectLibraryKey);
-    if (expectedRaw !== undefined && previous !== expectedRaw) return false;
-    storage.setItem(projectLibraryKey, candidate);
-    const readBack = storage.getItem(projectLibraryKey);
-    const parsed = parseProjectLibrary(readBack);
-    if (readBack === candidate && parsed && !parsed.recovered &&
-        projectLibraryRecord(parsed.library) === candidate) return true;
-  } catch (_) {}
-  let restored = false;
-  try {
-    if (previous === null || previous === undefined) storage.removeItem(projectLibraryKey);
-    else storage.setItem(projectLibraryKey, previous);
-    restored = storage.getItem(projectLibraryKey) === (previous ?? null);
-  } catch (_) {}
-  if (!restored) uncertainLibraryStorage.add(storage);
-  return false;
+  if (!canonicalProjectLibraryRecord(candidate)) return false;
+  const state = storeExactRecord(storage, projectLibraryKey, () => candidate,
+    canonicalProjectLibraryRecord, expectedRaw, true);
+  if (state === 'uncertain') uncertainLibraryStorage.add(storage);
+  return state === 'stored';
 }
 
 function migrateProjectLibrary(storage = localStorage) {

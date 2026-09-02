@@ -153,6 +153,216 @@ assert.equal(io.loadLastKnownGood(), null, 'corrupt stored envelope is rejected'
 assert.equal(io.storeLastKnownGood(envelope), true);
 const stableRecord = localStorage.getItem(io.key);
 
+class OperationStorage {
+  constructor(initial, faults = {}) {
+    this.values = new Map(Object.entries(initial));
+    this.faults = faults;
+    this.trace = [];
+  }
+  operation(type, key, value) {
+    const entry = {number: this.trace.length + 1, type, key};
+    this.trace.push(entry);
+    const fault = this.faults[entry.number];
+    if (fault?.throws) throw new Error(fault.throws);
+    if (type === 'get') {
+      if (fault && Object.hasOwn(fault, 'returns')) return fault.returns;
+      return this.values.has(key) ? this.values.get(key) : null;
+    }
+    if (type === 'set') this.values.set(key, String(value));
+    else this.values.delete(key);
+  }
+  getItem(key) { return this.operation('get', key); }
+  setItem(key, value) { this.operation('set', key, value); }
+  removeItem(key) { this.operation('remove', key); }
+  raw(key) { return this.values.has(key) ? this.values.get(key) : null; }
+  operations() { return this.trace.map(({type, key}) => `${type}:${key}`); }
+}
+
+const candidateSlotBytes = modeEnvelope;
+const candidateSlotRaw = io.envelopeRecord(candidateSlotBytes);
+const previousLibrary = {...library.emptyProjectLibrary(), nextProject: 2};
+const previousLibraryRaw = JSON.stringify(previousLibrary);
+const candidateLibrary = library.emptyProjectLibrary();
+const candidateLibraryRaw = JSON.stringify(candidateLibrary);
+
+function runStorageFailure({
+  label, targetKey, otherKey, initialTarget, otherRaw, faults, invoke,
+  operations, finalTarget, uncertain = false,
+}) {
+  const storage = new OperationStorage({
+    ...(initialTarget === null ? {} : {[targetKey]: initialTarget}),
+    [otherKey]: otherRaw,
+  }, faults);
+  const gpioBefore = gpio.slice();
+  let result;
+  assert.doesNotThrow(() => { result = invoke(storage); }, `${label} does not escape`);
+  assert.equal(result, false, `${label} reports failure`);
+  assert.deepEqual(storage.operations(), operations, `${label} operation trace`);
+  assert.equal(storage.raw(targetKey), finalTarget, `${label} target result`);
+  assert.equal(storage.raw(otherKey), otherRaw, `${label} preserves the unaffected storage key`);
+  assert.deepEqual(gpio, gpioBefore, `${label} preserves all live GPIO/project bytes`);
+  if (targetKey === library.key) {
+    assert.equal(library.loadProjectLibrary(storage).state === 'uncertain', uncertain,
+      `${label} uncertain lockout policy`);
+    if (uncertain) {
+      const operationCount = storage.trace.length;
+      assert.equal(library.storeProjectLibrary(candidateLibrary, storage), false,
+        `${label} permanently rejects later writes`);
+      assert.equal(storage.trace.length, operationCount,
+        `${label} lockout rejects before another storage operation`);
+    }
+  }
+  return storage;
+}
+
+const slotFailureCases = [
+  {
+    label: 'slot initial get failure', initialTarget: stableRecord,
+    faults: {1: {throws: 'initial get'}},
+    operations: [`get:${io.key}`, `remove:${io.key}`], finalTarget: null,
+  },
+  {
+    label: 'slot candidate set failure', initialTarget: stableRecord,
+    faults: {2: {throws: 'candidate set'}},
+    operations: [`get:${io.key}`, `set:${io.key}`, `set:${io.key}`], finalTarget: stableRecord,
+  },
+  {
+    label: 'slot read-back get failure', initialTarget: stableRecord,
+    faults: {3: {throws: 'read-back get'}},
+    operations: [`get:${io.key}`, `set:${io.key}`, `get:${io.key}`, `set:${io.key}`],
+    finalTarget: stableRecord,
+  },
+  {
+    label: 'slot corrupt read-back', initialTarget: stableRecord,
+    faults: {3: {returns: '{"corrupt":true}'}},
+    operations: [`get:${io.key}`, `set:${io.key}`, `get:${io.key}`, `set:${io.key}`],
+    finalTarget: stableRecord,
+  },
+  {
+    label: 'slot restore-via-remove failure', initialTarget: null,
+    faults: {3: {returns: '{"corrupt":true}'}, 4: {throws: 'restore remove'}},
+    operations: [`get:${io.key}`, `set:${io.key}`, `get:${io.key}`, `remove:${io.key}`],
+    finalTarget: candidateSlotRaw,
+  },
+  {
+    label: 'slot restore-via-set failure', initialTarget: stableRecord,
+    faults: {3: {returns: '{"corrupt":true}'}, 4: {throws: 'restore set'}},
+    operations: [`get:${io.key}`, `set:${io.key}`, `get:${io.key}`, `set:${io.key}`],
+    finalTarget: candidateSlotRaw,
+  },
+];
+let unverifiedSlotStorage;
+for (const test of slotFailureCases) {
+  const storage = runStorageFailure({
+    ...test,
+    targetKey: io.key,
+    otherKey: library.key,
+    otherRaw: previousLibraryRaw,
+    invoke: (target) => io.storeLastKnownGood(candidateSlotBytes, target),
+  });
+  if (test.label === 'slot restore-via-set failure') unverifiedSlotStorage = storage;
+}
+const slotTraceBeforeRetry = unverifiedSlotStorage.trace.length;
+assert.equal(io.storeLastKnownGood(envelope, unverifiedSlotStorage), true,
+  'unverifiable last-known-good restoration does not create an uncertain-storage lockout');
+assert.ok(unverifiedSlotStorage.trace.length > slotTraceBeforeRetry,
+  'last-known-good retry reaches storage after unverified best-effort rollback');
+
+const libraryFailureCases = [
+  {
+    label: 'library initial get failure', initialTarget: previousLibraryRaw,
+    faults: {1: {throws: 'initial get'}},
+    operations: [`get:${library.key}`, `remove:${library.key}`, `get:${library.key}`],
+    finalTarget: null,
+  },
+  {
+    label: 'library candidate set failure', initialTarget: previousLibraryRaw,
+    faults: {2: {throws: 'candidate set'}},
+    operations: [`get:${library.key}`, `set:${library.key}`, `set:${library.key}`, `get:${library.key}`],
+    finalTarget: previousLibraryRaw,
+  },
+  {
+    label: 'library read-back get failure', initialTarget: previousLibraryRaw,
+    faults: {3: {throws: 'read-back get'}},
+    operations: [`get:${library.key}`, `set:${library.key}`, `get:${library.key}`,
+      `set:${library.key}`, `get:${library.key}`],
+    finalTarget: previousLibraryRaw,
+  },
+  {
+    label: 'library corrupt read-back', initialTarget: previousLibraryRaw,
+    faults: {3: {returns: '{"corrupt":true}'}},
+    operations: [`get:${library.key}`, `set:${library.key}`, `get:${library.key}`,
+      `set:${library.key}`, `get:${library.key}`],
+    finalTarget: previousLibraryRaw,
+  },
+  {
+    label: 'library restore-via-remove failure', initialTarget: null,
+    faults: {3: {returns: '{"corrupt":true}'}, 4: {throws: 'restore remove'}},
+    operations: [`get:${library.key}`, `set:${library.key}`, `get:${library.key}`, `remove:${library.key}`],
+    finalTarget: candidateLibraryRaw, uncertain: true,
+  },
+  {
+    label: 'library restore-via-set failure', initialTarget: previousLibraryRaw,
+    faults: {3: {returns: '{"corrupt":true}'}, 4: {throws: 'restore set'}},
+    operations: [`get:${library.key}`, `set:${library.key}`, `get:${library.key}`, `set:${library.key}`],
+    finalTarget: candidateLibraryRaw, uncertain: true,
+  },
+  {
+    label: 'library post-restore verification failure', initialTarget: previousLibraryRaw,
+    faults: {3: {returns: '{"corrupt":true}'}, 5: {returns: '{"unverified":true}'}},
+    operations: [`get:${library.key}`, `set:${library.key}`, `get:${library.key}`,
+      `set:${library.key}`, `get:${library.key}`],
+    finalTarget: previousLibraryRaw, uncertain: true,
+  },
+];
+for (const test of libraryFailureCases) {
+  runStorageFailure({
+    ...test,
+    targetKey: library.key,
+    otherKey: io.key,
+    otherRaw: stableRecord,
+    invoke: (target) => library.storeProjectLibrary(candidateLibrary, target),
+  });
+}
+
+const staleStorage = new OperationStorage({
+  [library.key]: previousLibraryRaw,
+  [io.key]: stableRecord,
+});
+const gpioBeforeStale = gpio.slice();
+assert.equal(library.storeProjectLibrary(candidateLibrary, staleStorage, 'stale expected raw'), false);
+assert.deepEqual(staleStorage.operations(), [`get:${library.key}`],
+  'stale expectedRaw performs exactly one pre-mutation compare-and-swap read');
+assert.equal(staleStorage.raw(library.key), previousLibraryRaw, 'stale expectedRaw performs no write');
+assert.equal(staleStorage.raw(io.key), stableRecord, 'stale expectedRaw preserves the other key');
+assert.deepEqual(gpio, gpioBeforeStale, 'stale expectedRaw preserves live GPIO/project bytes');
+
+const invalidLibraryStorage = new OperationStorage({
+  [library.key]: previousLibraryRaw,
+  [io.key]: stableRecord,
+});
+assert.equal(library.storeProjectLibrary({...candidateLibrary, extra: true}, invalidLibraryStorage), false,
+  'non-canonical library candidates are rejected');
+assert.deepEqual(invalidLibraryStorage.operations(), [],
+  'candidate validation occurs before any storage operation');
+
+for (const [label, key, otherKey, otherRaw, candidate, invoke] of [
+  ['slot success', io.key, library.key, previousLibraryRaw, candidateSlotRaw,
+    (storage) => io.storeLastKnownGood(candidateSlotBytes, storage)],
+  ['library success', library.key, io.key, stableRecord, candidateLibraryRaw,
+    (storage) => library.storeProjectLibrary(candidateLibrary, storage, previousLibraryRaw)],
+]) {
+  const initial = key === io.key ? stableRecord : previousLibraryRaw;
+  const storage = new OperationStorage({[key]: initial, [otherKey]: otherRaw});
+  const gpioBefore = gpio.slice();
+  assert.equal(invoke(storage), true, `${label} commits`);
+  assert.deepEqual(storage.operations(), [`get:${key}`, `set:${key}`, `get:${key}`],
+    `${label} exact-readback trace`);
+  assert.equal(storage.raw(key), candidate, `${label} stores the exact canonical record`);
+  assert.equal(storage.raw(otherKey), otherRaw, `${label} preserves the unaffected key`);
+  assert.deepEqual(gpio, gpioBefore, `${label} preserves live GPIO/project bytes`);
+}
+
 function revisionEnvelope(revision, salt = revision) {
   const bytes = envelope.slice();
   put16(bytes, 12, revision);
