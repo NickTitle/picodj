@@ -204,8 +204,7 @@ function save_song()
  return true
 end
 
-function load_song(show_notice)
- if show_notice==false then return false end
+function load_song()
  if io_mode!="idle" then io_fail("project i/o busy",2) return false end
  io_stop_authored()
  io_id,io_sequence,io_offset=(io_id+1)%256,0,0

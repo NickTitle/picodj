@@ -43,7 +43,7 @@ function context_apply(name)
  if context_menu=="start" then
   if name=="play" then toggle_song()
   elseif name=="save browser slot" then save_song()
-  elseif name=="load browser slot" then load_song(true)
+  elseif name=="load browser slot" then load_song()
   elseif name=="save data cart" then native_save()
   else native_load() end
  elseif context_menu=="song" then
