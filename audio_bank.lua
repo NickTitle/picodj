@@ -135,18 +135,19 @@ end
 -- crc-16/ccitt-false: poly 0x1021, init 0xffff, no reflection/xorout.
 -- the result is a signed pico-8 16-bit bit pattern; mask with 0xffff when
 -- presenting it outside the vm.
+function crc_byte(crc,value)
+ crc=(crc^^(value<<8))&0xffff
+ for bit=1,8 do
+  crc=(crc&0x8000)!=0 and ((crc<<1)^^0x1021)&0xffff or (crc<<1)&0xffff
+ end
+ return crc
+end
+
 function bank_checksum(base)
  if not bank_region(base) or base==bank_audio_base and bank_profile_active then return end
  local crc=0xffff
  for i=0,bank_size-1 do
-  crc=(crc^^(peek(base+i)<<8))&0xffff
-  for bit=1,8 do
-   if (crc&0x8000)!=0 then
-    crc=((crc<<1)^^0x1021)&0xffff
-   else
-    crc=(crc<<1)&0xffff
-   end
-  end
+  crc=crc_byte(crc,peek(base+i))
  end
  return crc
 end

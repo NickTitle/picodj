@@ -20,6 +20,29 @@ function stop_song() bank_profile_restore() playing=false return true end
 failures=0
 test_saved_base,test_live_base=0x9200,0xca94
 
+function test_crc_byte(crc,value)
+ crc=(crc^^(value<<8))&0xffff
+ for bit=1,8 do
+  crc=(crc&0x8000)!=0 and ((crc<<1)^^0x1021)&0xffff or (crc<<1)&0xffff
+ end
+ return crc
+end
+
+function test_crc(values)
+ local crc=0xffff
+ for i=1,#values do crc=test_crc_byte(crc,values[i]) end
+ return crc
+end
+
+function test_crc_range(crc,base,size,skip_start,skip_end)
+ for i=0,size-1 do
+  if not skip_start or i<skip_start or i>=skip_end then
+   crc=test_crc_byte(crc,peek(base+i))
+  end
+ end
+ return crc
+end
+
 function capture_live()
  memcpy(test_live_base,bank_audio_base,bank_size)
  test_live_profile,test_live_profile_active=bank_profile_kind,bank_profile_is_active()
@@ -81,8 +104,8 @@ end
 function refresh_saved_envelope_crc()
  io_put16(io_header+10,0)
  local crc=0xffff
- for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
- for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(test_saved_base+i)) end
+ for i=0,io_header_size-1 do crc=test_crc_byte(crc,peek(io_header+i)) end
+ for i=0,bank_size-1 do crc=test_crc_byte(crc,peek(test_saved_base+i)) end
  io_put16(io_header+10,crc)
  return crc
 end
@@ -102,6 +125,48 @@ project_test_init=_init
 function _init()
  project_test_init()
  bank_project_init()
+ local empty_crc=test_crc({})
+ check(empty_crc==-1 and (empty_crc&0xffff)==0xffff,
+  "empty crc signed and unsigned presentation")
+ check(test_crc({0})==-7696 and (test_crc({0})&0xffff)==0xe1f0,
+  "zero-byte crc vector")
+ check(test_crc({0x80})==0x7078,"high-bit crc vector")
+ check(test_crc({0xff})==-256 and (test_crc({0xff})&0xffff)==0xff00,
+  "all-bits crc signed and unsigned presentation")
+ check((test_crc({0,0,0,0})&0xffff)==0x84c0,
+  "multi-zero crc vector")
+ check(test_crc({49,50,51,52,53,54,55,56,57})==0x29b1,
+  "representative crc vector")
+
+ -- This exact PTP2 fixture is shared with the JavaScript regression vector.
+ for i=0,bank_size-1 do poke(bank_stage_base+i,((i+64)*37+11)&0xff) end
+ memset(io_header,0,io_header_size)
+ poke2(io_header,0x5450) poke2(io_header+2,0x3250)
+ poke2(io_header+4,io_header_size*256+2)
+ io_put16(io_header+6,io_envelope_size) io_put16(io_header+12,37)
+ poke2(io_header+14,0x0101)
+ io_put_text(16,"strfld track 1",15) io_put_text(32,"e7e97ab track 1",23)
+ poke(io_header+57,1) poke(io_header+58,4)
+ local fixture_bank_crc=bank_checksum(bank_stage_base)
+ local reference_bank_crc=test_crc_range(0xffff,bank_stage_base,bank_size)
+ check((fixture_bank_crc&0xffff)==0xbc23 and
+  (reference_bank_crc&0xffff)==0xbc23,"cross-runtime bank crc vector")
+ io_put16(io_header+8,fixture_bank_crc) io_put16(io_header+10,0)
+ local fixture_envelope_crc=io_envelope_crc(bank_stage_base)
+ local reference_envelope_crc=test_crc_range(0xffff,io_header,io_header_size)
+ reference_envelope_crc=test_crc_range(reference_envelope_crc,
+  bank_stage_base,bank_size)
+ check((fixture_envelope_crc&0xffff)==0xa683 and
+  (reference_envelope_crc&0xffff)==0xa683,"cross-runtime envelope crc vector")
+ io_put16(io_header+10,fixture_envelope_crc)
+ memset(native_base,0,native_record)
+ poke2(native_base,0x5450) poke2(native_base+2,0x314a) io_put16(native_base+4,37)
+ memcpy(native_base+8,io_header,io_header_size)
+ memcpy(native_base+8+io_header_size,bank_stage_base,bank_size)
+ local reference_native_crc=test_crc_range(0xffff,native_base,native_record,6,8)
+ check((native_crc(native_base)&0xffff)==0x2b65 and
+  (reference_native_crc&0xffff)==0x2b65,"cross-runtime native record crc vector")
+
  for i=0,63 do poke(bank_sfx_addr(0,i),(i*29+7)&0xff) end
  poke(bank_sfx_addr(0,64),0xd0)
  poke(bank_sfx_addr(0,65),0xa5)
@@ -119,7 +184,9 @@ function _init()
  local saved_crc=bank_checksum(bank_audio_base)
  io_begin_frame(io_request_load,1,0,0,io_envelope_size,0,0)
  io_finish_frame()
- check(io_get16(io_gpio+14)==0x4bca,"gpio crc matches browser vector")
+ local reference_frame_crc=test_crc_range(0xffff,io_gpio,14)
+ check(io_get16(io_gpio+14)==0x4bca and
+  (reference_frame_crc&0xffff)==0x4bca,"cross-runtime gpio frame crc vector")
 
  check(bank_profile_apply(),"save test profile applies")
  playing=true
