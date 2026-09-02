@@ -315,7 +315,8 @@ function storageTransactionLifecycle() {
   assert.equal((source.match(/\bstoreExactRecord\s*\(/g) || []).length, migrated ? 3 : 0,
     'shared exact-record mechanics must have exactly two policy-wrapper callers');
   assert.equal((source.match(/\bcanonicalProjectLibraryRecord\s*\(/g) || []).length,
-    migrated ? 3 : 0, 'canonical library validation must have exactly two policy uses');
+    migrated ? 2 : 0,
+  'canonical library validation must have one call plus its exact function-reference use');
   assert.equal((source.match(/\bstoreProjectLibrary\s*\(/g) || []).length, 7,
     'unrelated library mutation plumbing changed during storage transaction migration');
   assert.equal(Buffer.byteLength(legacyLastKnownGoodTransaction) +
