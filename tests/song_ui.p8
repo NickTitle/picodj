@@ -217,23 +217,23 @@ check(app_view=="song" and song_error==nil and not bank_dirty and
  song_pattern=63
  song_channel=0
  check(start_song(),"native playback starts")
- check(playing and bank_profile_is_active() and music_calls[1][1]==63 and
+ check(playing and bank_profile_active and music_calls[1][1]==63 and
        music_calls[1][3]==0xf,
        "music pattern and profile active")
  before=raw_song(63,0)
  check(song_begin_edit("mute"),"begin edit during play")
  check(song_commit_edit(),"commit edit during play")
- check(playing and bank_profile_is_active(),"playback restarts")
+ check(playing and bank_profile_active,"playback restarts")
  check(#music_calls==3 and music_calls[2][1]==-1 and music_calls[3][1]==63,
        "edit uses stop restore restart")
  check(raw_song(63,0)==(before^^0x40),"active edit is not dropped")
- check(song_undo() and playing and bank_profile_is_active() and
+ check(song_undo() and playing and bank_profile_active and
        raw_song(63,0)==before and #music_calls==5,
        "active undo stops restores swaps restarts")
- check(song_undo() and playing and bank_profile_is_active() and
+ check(song_undo() and playing and bank_profile_active and
        raw_song(63,0)==(before^^0x40) and #music_calls==7,
        "active redo stops restores swaps restarts")
- check(stop_song() and not bank_profile_is_active(),"native playback restores")
+ check(stop_song() and not bank_profile_active,"native playback restores")
 
  -- O hands the exact selected SFX to Arc 2; X return keeps cursor/scroll.
  reset_ui()

@@ -30,10 +30,6 @@ function bank_project_init()
  bank_profile_active,bank_audition_saved=false,false
 end
 
-function bank_mark_clean()
- bank_dirty=false
-end
-
 function bank_song_addr(pattern,channel)
  if not bank_int(pattern,0,63) or not bank_int(channel,0,3) then return end
  return bank_song_base+pattern*4+channel

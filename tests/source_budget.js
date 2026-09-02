@@ -84,6 +84,37 @@ function symbolReferences(symbol) {
   return references;
 }
 
+const microHelperAllowlists = {
+  bank_profile_is_active: [
+    ['audio_bank.lua', 'function bank_profile_is_active()'],
+    ['song_ui.lua', 'if playing or bank_profile_is_active() then stop_song() end'],
+    ['song_ui.lua', 'if playing or bank_profile_is_active() then stop_song() end'],
+    ['sfx_ui.lua', '(bank_profile_is_active() and "profile" or "auth"))),42,2,6)'],
+    ['project_io.lua', 'if bank_profile_is_active() then return false end'],
+    ['project_io.lua', 'if playing or bank_profile_is_active() then stop_song() end'],
+  ],
+  bank_mark_clean: [
+    ['audio_bank.lua', 'function bank_mark_clean()'],
+    ['project_io.lua', 'bank_mark_clean() undo_owner=nil song_error=nil return true'],
+    ['project_io.lua', 'bank_mark_clean() undo_owner=nil io_mode="idle" io_emit_control(io_done,0)'],
+  ],
+  io_envelope_byte: [
+    ['project_io.lua', 'function io_envelope_byte(offset)'],
+    ['project_io.lua', 'for i=0,length-1 do poke(io_gpio+16+i,io_envelope_byte(io_offset+i)) end'],
+  ],
+};
+
+function microHelperLifecycle(symbol) {
+  const references = symbolReferences(symbol);
+  const actual = references.map(({file, source}) => [file, source]);
+  const allowed = microHelperAllowlists[symbol];
+  assert.ok(actual.length === 0 || actual.length === allowed.length,
+    `${symbol} must retain its complete legacy abstraction or be fully removed`);
+  if (actual.length) assert.deepEqual(actual, allowed,
+    `${symbol} differs from the exact measured legacy abstraction allowlist`);
+  return {symbol, references};
+}
+
 const snapshotAllowlist = {
   bank_snapshot_base: [
     ['audio_bank.lua', 'bank_size,bank_stage_base,bank_snapshot_base=0x1200,0x8000,0x9200'],
@@ -160,6 +191,7 @@ const browser = browserFiles.map((file) =>
 const reachability = ['bank_field', 'bank_copy', 'bank_rollback']
   .map(productionReachability);
 const snapshotLifecycleReachability = Object.keys(snapshotAllowlist).map(snapshotLifecycle);
+const microHelperReachability = Object.keys(microHelperAllowlists).map(microHelperLifecycle);
 const nativeCrcPolynomialReferences = nativeCrcPolynomial();
 const nativeTotal = sumMetrics(native);
 const browserTotal = sumMetrics(browser);
@@ -205,6 +237,7 @@ console.log(JSON.stringify({
   browser: {files: browser, total: browserTotal},
   reachability,
   snapshotLifecycle: snapshotLifecycleReachability,
+  microHelpers: microHelperReachability,
   nativeCrcPolynomial: nativeCrcPolynomialReferences,
   pxa: {
     offset: `0x${pxaOffset.toString(16)}`,

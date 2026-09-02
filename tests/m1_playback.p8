@@ -9,7 +9,7 @@ function ck(v,s) if not v then fails+=1 printh("fail: "..s) end end
 function say() end
 function finish()
  stop_song()
- ck(not bank_profile_is_active(),"profile restored")
+ ck(not bank_profile_active,"profile restored")
  ck((bank_checksum(bank_audio_base)&0xffff)==original_crc,"authored bank restored")
  if fails==0 then printh("pocket tracker m1 playback: passed")
  else printh("pocket tracker m1 playback: failed "..fails) end
