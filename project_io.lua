@@ -11,18 +11,10 @@ native_cart="pocket-tracker-data.p8"
 native_base,native_record,native_total=0xa604,0x1248,0x2490
 native_sentinel=0xa55a
 
-function io_crc_byte(crc,value)
- crc=(crc^^(value<<8))&0xffff
- for bit=1,8 do
-  crc=(crc&0x8000)!=0 and ((crc<<1)^^0x1021)&0xffff or (crc<<1)&0xffff
- end
- return crc
-end
-
 function io_frame_crc()
  local crc=0xffff
- for i=0,13 do crc=io_crc_byte(crc,peek(io_gpio+i)) end
- for i=0,peek(io_gpio+12)-1 do crc=io_crc_byte(crc,peek(io_gpio+16+i)) end
+ for i=0,13 do crc=crc_byte(crc,peek(io_gpio+i)) end
+ for i=0,peek(io_gpio+12)-1 do crc=crc_byte(crc,peek(io_gpio+16+i)) end
  return crc
 end
 
@@ -48,8 +40,8 @@ end
 
 function io_envelope_crc(base)
  local crc=0xffff
- for i=0,io_header_size-1 do crc=io_crc_byte(crc,peek(io_header+i)) end
- for i=0,bank_size-1 do crc=io_crc_byte(crc,peek(base+i)) end
+ for i=0,io_header_size-1 do crc=crc_byte(crc,peek(io_header+i)) end
+ for i=0,bank_size-1 do crc=crc_byte(crc,peek(base+i)) end
  return crc
 end
 
@@ -80,7 +72,7 @@ end
 function native_crc(base)
  local crc=0xffff
  for i=0,native_record-1 do
-  if i<6 or i>7 then crc=io_crc_byte(crc,peek(base+i)) end
+  if i<6 or i>7 then crc=crc_byte(crc,peek(base+i)) end
  end
  return crc
 end
