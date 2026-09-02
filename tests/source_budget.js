@@ -276,6 +276,12 @@ const sharedExactRecordTransaction = `function storeExactRecord(
 }
 
 `;
+const sharedCanonicalLibraryRecord = `function canonicalProjectLibraryRecord(raw) {
+  const parsed = parseProjectLibrary(raw);
+  return parsed && !parsed.recovered && projectLibraryRecord(parsed.library) === raw;
+}
+
+`;
 const sharedLastKnownGoodTransaction = `function storeLastKnownGood(bytes, storage = localStorage) {
   if (!envelopeValid(bytes)) return false;
   return storeExactRecord(storage, projectStoreKey, envelopeRecord(bytes),
@@ -286,13 +292,9 @@ const sharedLastKnownGoodTransaction = `function storeLastKnownGood(bytes, stora
 const sharedLibraryTransaction = `function storeProjectLibrary(library, storage = localStorage, expectedRaw) {
   if (projectTransferActive() || uncertainLibraryStorage.has(storage)) return false;
   const candidate = projectLibraryRecord(library);
-  const checked = parseProjectLibrary(candidate);
-  if (!checked || checked.recovered || projectLibraryRecord(checked.library) !== candidate) return false;
-  const state = storeExactRecord(storage, projectLibraryKey, candidate, (readBack) => {
-    const parsed = parseProjectLibrary(readBack);
-    return readBack === candidate && parsed && !parsed.recovered &&
-      projectLibraryRecord(parsed.library) === candidate;
-  }, expectedRaw, true);
+  if (!canonicalProjectLibraryRecord(candidate)) return false;
+  const state = storeExactRecord(storage, projectLibraryKey, candidate,
+    canonicalProjectLibraryRecord, expectedRaw, true);
   if (state === 'uncertain') uncertainLibraryStorage.add(storage);
   return state === 'stored';
 }
@@ -303,14 +305,17 @@ function storageTransactionLifecycle() {
   const source = read('mobile.js').toString('utf8');
   const legacy = [legacyLastKnownGoodTransaction, legacyLibraryTransaction]
     .map((shape) => source.split(shape).length - 1);
-  const shared = [sharedExactRecordTransaction, sharedLastKnownGoodTransaction,
-    sharedLibraryTransaction].map((shape) => source.split(shape).length - 1);
+  const shared = [sharedExactRecordTransaction, sharedCanonicalLibraryRecord,
+    sharedLastKnownGoodTransaction, sharedLibraryTransaction]
+    .map((shape) => source.split(shape).length - 1);
   assert.ok(legacy.every((count) => count === 1) && shared.every((count) => count === 0) ||
     legacy.every((count) => count === 0) && shared.every((count) => count === 1),
   'storage transactions must retain both exact legacy bodies or use the complete shared shape');
   const migrated = shared[0] === 1;
   assert.equal((source.match(/\bstoreExactRecord\s*\(/g) || []).length, migrated ? 3 : 0,
     'shared exact-record mechanics must have exactly two policy-wrapper callers');
+  assert.equal((source.match(/\bcanonicalProjectLibraryRecord\s*\(/g) || []).length,
+    migrated ? 3 : 0, 'canonical library validation must have exactly two policy uses');
   assert.equal((source.match(/\bstoreProjectLibrary\s*\(/g) || []).length, 7,
     'unrelated library mutation plumbing changed during storage transaction migration');
   assert.equal(Buffer.byteLength(legacyLastKnownGoodTransaction) +
