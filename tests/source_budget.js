@@ -116,6 +116,31 @@ function snapshotLifecycle(symbol) {
   return {symbol, references};
 }
 
+function nativeCrcPolynomial() {
+  const references = [];
+  for (const file of nativeFiles) {
+    read(file).toString('utf8').split('\n').forEach((line, index) => {
+      if (line.includes('0x1021')) {
+        references.push({file, line: index + 1, source: line.trim()});
+      }
+    });
+  }
+  const actual = references.map(({file, source}) => [file, source]);
+  const legacy = [
+    ['audio_bank.lua', '-- crc-16/ccitt-false: poly 0x1021, init 0xffff, no reflection/xorout.'],
+    ['audio_bank.lua', 'crc=((crc<<1)^^0x1021)&0xffff'],
+    ['project_io.lua', 'crc=(crc&0x8000)!=0 and ((crc<<1)^^0x1021)&0xffff or (crc<<1)&0xffff'],
+  ];
+  const shared = [
+    ['audio_bank.lua', '-- crc-16/ccitt-false: poly 0x1021, init 0xffff, no reflection/xorout.'],
+    ['audio_bank.lua', 'crc=(crc&0x8000)!=0 and ((crc<<1)^^0x1021)&0xffff or (crc<<1)&0xffff'],
+  ];
+  assert.ok(JSON.stringify(actual) === JSON.stringify(legacy) ||
+    JSON.stringify(actual) === JSON.stringify(shared),
+  'native CRC polynomial must be the exact legacy pair or one shared byte step');
+  return references;
+}
+
 const cartSource = read('pocket-tracker.p8').toString('utf8');
 const cartIncludes = [...cartSource.matchAll(/^#include\s+(.+)$/gm)].map((match) => match[1]);
 assert.deepEqual(cartIncludes, nativeFiles,
@@ -135,6 +160,7 @@ const browser = browserFiles.map((file) =>
 const reachability = ['bank_field', 'bank_copy', 'bank_rollback']
   .map(productionReachability);
 const snapshotLifecycleReachability = Object.keys(snapshotAllowlist).map(snapshotLifecycle);
+const nativeCrcPolynomialReferences = nativeCrcPolynomial();
 const nativeTotal = sumMetrics(native);
 const browserTotal = sumMetrics(browser);
 assert.ok(nativeTotal.bytes <= 41898,
@@ -179,6 +205,7 @@ console.log(JSON.stringify({
   browser: {files: browser, total: browserTotal},
   reachability,
   snapshotLifecycle: snapshotLifecycleReachability,
+  nativeCrcPolynomial: nativeCrcPolynomialReferences,
   pxa: {
     offset: `0x${pxaOffset.toString(16)}`,
     header: pxaHeader,

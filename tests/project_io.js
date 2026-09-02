@@ -65,6 +65,18 @@ assert.match(indexSource, /role="status" aria-live="polite"/);
 assert.match(mobileSource, /Imported authored \.p8\. Choose Load in the tracker\./);
 assert.match(mobileSource, /Imported audio sections as no profile/);
 
+const crcVectors = [
+  [[], 0xffff, 'empty'],
+  [[0], 0xe1f0, 'zero byte'],
+  [[0x80], 0x7078, 'high bit'],
+  [[0xff], 0xff00, 'all bits'],
+  [[0, 0, 0, 0], 0x84c0, 'multiple zero bytes'],
+  [Array.from(Buffer.from('123456789')), 0x29b1, 'representative bytes'],
+];
+for (const [bytes, expected, label] of crcVectors) {
+  assert.equal(io.crc16(Uint8Array.from(bytes)), expected, `${label} CRC vector`);
+}
+
 function put16(bytes, offset, value) {
   bytes[offset] = value & 255;
   bytes[offset + 1] = value >> 8;
@@ -91,6 +103,21 @@ function fixtureEnvelope() {
 }
 
 const envelope = fixtureEnvelope();
+assert.equal(io.crc16(envelope, 64), 0xbc23, 'cross-runtime bank CRC vector');
+assert.equal(io.crc16(envelope, 0, envelope.length, 10, 12), 0xa683,
+  'cross-runtime envelope CRC vector');
+const requestFrame = new Uint8Array(128);
+requestFrame.set([80, 84, 75, 50, 1, 7, 1, 0, 0, 0, 64, 18, 0, 0]);
+assert.equal(io.crc16(requestFrame, 0, 14), 0x4bca,
+  'cross-runtime GPIO frame CRC vector');
+const nativeRecord = new Uint8Array(4680);
+nativeRecord.set([80, 84, 74, 49, 37, 0]);
+nativeRecord.set(envelope, 8);
+const nativeRecordPayload = new Uint8Array(nativeRecord.length - 2);
+nativeRecordPayload.set(nativeRecord.slice(0, 6));
+nativeRecordPayload.set(nativeRecord.slice(8), 6);
+assert.equal(io.crc16(nativeRecordPayload), 0x2b65,
+  'cross-runtime native journal record CRC vector');
 assert.equal(io.envelopeValid(envelope), true);
 for (const kind of [0, 1, 2]) for (const version of [0, 1, 2]) {
   for (const start of [0, 1, 2]) for (const count of [0, 1, 4, 5]) {
