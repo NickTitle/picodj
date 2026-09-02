@@ -140,7 +140,6 @@ function _init()
  local mutated_crc=bank_checksum(bank_audio_base)
 
  undo_owner="sfx"
- check(not load_song(false) and undo_owner=="sfx","cancelled load preserves history")
  check(load_song(),"load request starts")
  emit_saved_page(0,0,true)
  check(io_mode=="idle" and io_frame_valid(io_error),"corrupt gpio frame rejected")

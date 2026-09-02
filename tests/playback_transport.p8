@@ -52,10 +52,19 @@ function _init()
   "single boosted start")
  ck(start_audition(0),"row preview")
  ck(not playing and not bank_profile_is_active(),"preview stops restores music")
+ ck(song_status()=="preview clean +2 all a----","preview status")
  ck(same(bank_sfx_addr(1,0),authored,bank_sfx_size*4),"sfx 1-4 exact")
  ck(peek2(bank_sfx_addr(63,0))==peek2(bank_note_addr(1,0)),"row copied to scratch")
  ck(not bank_dirty and bank_revision==0,"preview metadata clean")
- ck(stop_audition(true),"preview stop resumes")
+ local preview_channel=bank_audition_channel
+ stats[46+preview_channel]=bank_audition_sfx
+ update_playhead()
+ ck(audition_active and audition_seen and
+  song_status()=="preview clean +2 all a----","preview observes native start")
+ stats[46+preview_channel]=-1
+ update_playhead()
+ ck(not audition_active and playing and bank_profile_is_active() and
+  song_status()=="p00 r00 clean +2 all a----","preview completion resumes status")
  ck(same(bank_sfx_addr(63,0),scratch,bank_sfx_size),"scratch restored")
  ck(playing and bank_profile_is_active() and #music_calls==3,"music resumed")
  sfx_number=63
